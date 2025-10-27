@@ -5,7 +5,7 @@ from app.config import settings  # Configurações do .env
 from app.routes import cliente_routes   # Rotas de exemplo
 from app.routes import product_routes   # Rotas de produtos
 
-SERVER_URL = " https://f9d93299af6d.ngrok-free.app"
+SERVER_URL = " http://127.0.0.1:3000/"
 # Instância principal do app FastAPI
 app = FastAPI(
     title="API TOTVS Protheus",
@@ -35,7 +35,7 @@ def root():
     return {"status": "online", "message": "API TOTVS Protheus em execução 🚀"}
 
 # Inclui rotas adicionais (ex: prospecção de dados)
-app.include_router(cliente_routes.router, prefix="/dados", tags=["dados"])
+app.include_router(cliente_routes.router, prefix="/teste", tags=["teste"])
 app.include_router(product_routes.router, prefix="/products", tags=["products"])
 
 # Execução direta (modo desenvolvimento)

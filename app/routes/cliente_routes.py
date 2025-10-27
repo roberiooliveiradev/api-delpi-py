@@ -1,6 +1,6 @@
 # app/routes/cliente_routes.py
 from fastapi import APIRouter, HTTPException
-from app.services.clentes_service import get_clientes
+from app.services.clientes_service import get_clientes
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 
