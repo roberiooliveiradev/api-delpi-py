@@ -87,11 +87,7 @@ class ProductRepository(BaseRepository):
             s["totalComponentsAtLevel"] = len(structure)
 
         return structure
-
-
-
-
-
+    
     def list_parents(self, code: str, level: int = 1, visited: set[str] | None = None) -> list[dict]:
         """
         Recursively returns all parent products (G1_COD) where the given component is used.

@@ -1,11 +1,13 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from app.config import settings  # Configurações do .env
 from app.routes import cliente_routes   # Rotas de exemplo
 from app.routes import product_routes   # Rotas de produtos
 
-SERVER_URL = " http://127.0.0.1:3000/"
+# SERVER_URL = " http://127.0.0.1:3000/"
+SERVER_URL = "https://f7e6f7fa53a4.ngrok-free.app"
 # Instância principal do app FastAPI
 app = FastAPI(
     title="API TOTVS Protheus",
@@ -19,6 +21,9 @@ app = FastAPI(
         {"url": SERVER_URL, "description": "Servidor público (ngrok / produção)"}
     ],
 )
+
+# Adiciona compressão GZIP a todas as respostas
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # bytes
 
 # Configuração do CORS (para permitir chamadas do agente GPT e outros clientes)
 app.add_middleware(
