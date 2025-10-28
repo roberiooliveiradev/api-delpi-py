@@ -5,6 +5,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.config import settings  # Configurações do .env
 from app.routes import cliente_routes   # Rotas de exemplo
 from app.routes import product_routes   # Rotas de produtos
+from app.routes import system_routes   # Rotas de produtos
 
 # SERVER_URL = " http://127.0.0.1:3000/"
 SERVER_URL = "https://f7e6f7fa53a4.ngrok-free.app"
@@ -42,6 +43,7 @@ def root():
 # Inclui rotas adicionais (ex: prospecção de dados)
 app.include_router(cliente_routes.router, prefix="/teste", tags=["teste"])
 app.include_router(product_routes.router, prefix="/products", tags=["products"])
+app.include_router(system_routes.router, prefix="/system", tags=["system"])
 
 # Execução direta (modo desenvolvimento)
 if __name__ == "__main__":

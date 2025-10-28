@@ -33,43 +33,43 @@ def product(code: str):
         log_error(f"Erro ao consultar produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
-@router.get("/{code}/structure", summary="Consulta estrutura (BOM) recursiva do produto")
-def structure(code: str):
+@router.get("/{code}/structure", summary="Consulta estrutura (BOM) paginada via CTE")
+def structure(
+    code: str,
+    max_depth: int = Query(10, ge=1, le=15),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500)
+):
     """
-    Retorna a estrutura (BOM) recursiva do produto,
-    com nomes de nós padronizados em inglês.
+    Retorna a estrutura (BOM) via CTE com suporte a paginação.
     """
     try:
-        result = get_structure(code)
+        result = get_structure(code, max_depth, page, page_size)
         return success_response(
-            data={
-                "product": code,
-                "totalComponents": result["totalComponents"],
-                "components": result["components"]
-            },
-            message="Estrutura recursiva carregada com sucesso!"
+            data=result,
+            message=f"Estrutura do produto {code} retornada com sucesso (página {page}/{result['totalPages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar estrutura do produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
 
-@router.get("/{code}/parents", summary="Consulta produtos pai (onde o item é utilizado)")
-def parents(code: str):
+@router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
+def parents(
+    code: str,
+    max_depth: int = Query(10, ge=1, le=15),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500)
+):
     """
-    Retorna todos os produtos que utilizam o item informado na sua estrutura (recursivo),
-    com contagem de pais.
+    Retorna produtos pai (Where Used) via CTE com paginação.
     """
     try:
-        result = get_parents(code)
+        result = get_parents(code, max_depth, page, page_size)
         return success_response(
-            data={
-                "component": code,
-                "totalParents": result["totalParents"],
-                "parentProducts": result["parents"]
-            },
-            message="Listagem de produtos pai realizada com sucesso!"
+            data=result,
+            message=f"Produtos pai de {code} retornados com sucesso (página {page}/{result['totalPages']})."
         )
     except Exception as e:
-        log_error(f"Erro ao consultar produtos pai do item {code}: {e}")
+        log_error(f"Erro ao consultar pais do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
