@@ -108,13 +108,16 @@ class ProductRepository(BaseRepository):
             for r in rows
         ]
 
+        hierarchy = self._build_hierarchy(data, code, mode="structure")
         return {
+            "success": True,
             "total": total_rows,
             "page": page,
             "pageSize": page_size,
             "totalPages": (total_rows + page_size - 1) // page_size,
-            "data": data,
+            "data": hierarchy,
         }
+
 
     # -------------------------------
     # 🔹 PARENTS (WHERE USED)
@@ -192,10 +195,57 @@ class ProductRepository(BaseRepository):
             for r in rows
         ]
 
+        hierarchy = self._build_hierarchy(data, code, mode="parents")
         return {
+            "success": True,
             "total": total_rows,
             "page": page,
             "pageSize": page_size,
             "totalPages": (total_rows + page_size - 1) // page_size,
-            "data": data,
+            "data": hierarchy,
         }
+
+
+    def _build_hierarchy(self, rows: list[dict], root_code: str, mode: str = "structure") -> dict:
+        """
+        Monta a hierarquia em formato JSON aninhado.
+        mode:
+            - "structure": monta árvore de componentes (pai → filhos)
+            - "parents": monta árvore de produtos-pai (filho → pais)
+        """
+        from collections import defaultdict
+
+        nodes = defaultdict(lambda: {"components": []})
+        descriptions = {}
+
+        for row in rows:
+            if mode == "structure":
+                parent = row["parentCode"]
+                child = row["componentCode"]
+                parentDesc = row.get("parentDesc") or ""
+                childDesc = row.get("componentDesc") or ""
+            else:
+                # Modo 'parents'
+                parent = row["parentCode"]
+                child = row["childCode"]
+                parentDesc = row.get("parentDesc") or ""
+                childDesc = row.get("childDesc") or ""
+
+            descriptions[parent] = parentDesc
+            descriptions[child] = childDesc
+
+            nodes[parent]["code"] = parent
+            nodes[parent]["description"] = parentDesc
+            nodes[parent]["quantity"] = float(row.get("quantity", 0))
+            nodes[child]["code"] = child
+            nodes[child]["description"] = childDesc
+            nodes[child]["quantity"] = float(row.get("quantity", 0))
+
+            # Direção da relação
+            if mode == "structure":
+                nodes[parent]["components"].append(nodes[child])
+            else:
+                # No caso dos pais, o filho é quem contém o pai
+                nodes[child]["components"].append(nodes[parent])
+
+        return nodes[root_code]
