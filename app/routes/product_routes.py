@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_teste
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
+from app.repositories.base_repository import BaseRepository
 
 router = APIRouter()
 
@@ -72,4 +73,16 @@ def parents(
         )
     except Exception as e:
         log_error(f"Erro ao consultar pais do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+@router.get("/debug/teste", summary="Isso mostra se o D4_OPERAC realmente coincide com H8_OPER.")
+def teste():
+    try:
+        result = get_teste()
+        return success_response(
+            data=result,
+            message="Busca realizada com sucesso."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar. {e}")
         return error_response(f"Erro inesperado: {e}")

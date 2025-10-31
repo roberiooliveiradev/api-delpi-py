@@ -31,6 +31,32 @@ class ProductRepository(BaseRepository):
             ORDER BY B1_COD
         """
         return self.execute_query(query)
+    
+    def list_teste(self) -> list[dict]:
+        log_info("Executando correlação SD4010 ↔ SH8010...")
+        query = """
+            SELECT 
+                SD4.D4_OP,
+                SD4.D4_FILIAL,
+                SD4.D4_OPERAC,
+                SH8.H8_OP,
+                SH8.H8_OPER,
+                SD4.D4_SLDEMP,
+                SH8.H8_CTRAB,
+                SH8.H8_DTINI
+            FROM SD4010 AS SD4
+            INNER JOIN SH8010 AS SH8
+                ON SD4.D4_OP = SH8.H8_OP
+                AND SD4.D4_OPERAC = SH8.H8_OPER
+            WHERE 
+                SD4.D_E_L_E_T_ = ''
+                AND SH8.D_E_L_E_T_ = ''
+                AND SD4.D4_SLDEMP > 0
+            ORDER BY 
+                SD4.D4_OP, SD4.D4_OPERAC;
+        """
+        return self.execute_query(query)
+
 
     # -------------------------------
     # 🔹 ESTRUTURA (BOM)

@@ -37,6 +37,17 @@ def get_products(limit: int = 10) -> list[Product]:
         log_error(f"Erro ao listar produtos: {e}")
         raise DatabaseConnectionError(str(e))
 
+def get_teste() -> dict:
+    """
+    """
+    repo = ProductRepository()
+    try:
+        results = repo.list_teste()
+        return results
+    except Exception as e:
+        log_error(f"Erro: {e}")
+        raise DatabaseConnectionError(str(e))
+
 def get_structure(code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
     repo = ProductRepository()
     log_info(f"Buscando estrutura (CTE) paginada para {code}")
@@ -55,3 +66,4 @@ def get_parents(code: str, max_depth: int = 10, page: int = 1, page_size: int = 
     except Exception as e:
         log_error(f"Erro ao listar produtos pai do item {code}: {e}")
         raise DatabaseConnectionError(str(e))
+
