@@ -1,27 +1,18 @@
 # app/repositories/data_repository.py
-
-
-
 from app.repositories.base_repository import BaseRepository
 from app.utils.logger import log_info, log_error
 import re
 
-
 class DataRepository(BaseRepository):
     """
-    Repositório analítico dinâmico — suporta:
-    - JOINs e filtros seguros (inclusive AND/OR aninhados)
-    - GROUP BY, HAVING, ROLLUP e CUBE
-    - Agregações automáticas (SUM/AVG/COUNT)
-    - Operadores avançados: IN, NOT IN, BETWEEN, IS NULL, IS NOT NULL, LIKE, NOT LIKE
-    - Paginação e ordenação
+    Repositório analítico dinâmico — agora com suporte a aliases de tabelas.
     """
 
     ALLOWED_OPERATORS = {
-        "=", ">", "<", ">=", "<=", "<>", 
-        "LIKE", "NOT LIKE", 
-        "IN", "NOT IN", 
-        "BETWEEN", 
+        "=", ">", "<", ">=", "<=", "<>",
+        "LIKE", "NOT LIKE",
+        "IN", "NOT IN",
+        "BETWEEN",
         "IS NULL", "IS NOT NULL"
     }
     ALLOWED_JOIN_TYPES = {"INNER", "LEFT", "RIGHT", "FULL"}
@@ -34,9 +25,9 @@ class DataRepository(BaseRepository):
     def execute_dynamic_query(self, payload: dict) -> dict:
         try:
             # ✅ Compatibilidade com Pydantic v1/v2 e dicionários
-            if hasattr(payload, "model_dump"):  # Pydantic v2
+            if hasattr(payload, "model_dump"):
                 payload = payload.model_dump(exclude_none=True, by_alias=True)
-            elif hasattr(payload, "dict"):      # Pydantic v1
+            elif hasattr(payload, "dict"):
                 payload = payload.dict(exclude_none=True, by_alias=True)
             elif not isinstance(payload, dict):
                 raise TypeError("O payload recebido não é um dicionário ou modelo válido.")
@@ -53,6 +44,7 @@ class DataRepository(BaseRepository):
             rollup = payload.get("rollup", False)
             cube = payload.get("cube", False)
             auto_aggregate = payload.get("auto_aggregate", False)
+            aliases = payload.get("aliases") or {}
 
             # 🔹 Paginação opcional
             page = payload.get("page")
@@ -64,7 +56,7 @@ class DataRepository(BaseRepository):
             main_table = tables[0]
 
             # ======================================================
-            # 🔹 Validação de nomes
+            # 🔹 Validação de nomes / aliases
             # ======================================================
             for t in tables + columns + group_by + list(aggregates.keys()):
                 if t in ("*",) or t.endswith(".*"):
@@ -74,8 +66,8 @@ class DataRepository(BaseRepository):
                     if func_name not in self.ALLOWED_SQL_FUNCTIONS:
                         raise ValueError(f"Função SQL não permitida: {func_name}")
                     continue
-                if not self.SAFE_IDENTIFIER.match(t):
-                    raise ValueError(f"Nome inválido: {t}")
+                if not re.match(r"^[A-Za-z0-9_.()\s]+(AS\s+[A-Za-z0-9_]+)?$", t, re.IGNORECASE):
+                    raise ValueError(f"Nome inválido ou alias não permitido: {t}")
 
             # ======================================================
             # 🔹 SELECT base
@@ -84,7 +76,10 @@ class DataRepository(BaseRepository):
             for field, func in aggregates.items():
                 select_parts.append(f"{func.upper()}({field}) AS {func.lower()}_{field.split('.')[-1]}")
 
-            sql = f"SELECT {', '.join(select_parts)} FROM {main_table}"
+            main_table_name, main_alias = self._parse_table_alias(main_table)
+            sql = f"SELECT {', '.join(select_parts)} FROM {main_table_name}"
+            if main_alias:
+                sql += f" AS {main_alias}"
 
             # ======================================================
             # 🔹 JOINs
@@ -93,9 +88,14 @@ class DataRepository(BaseRepository):
                 join_type = j.get("type", "INNER").upper()
                 if join_type not in self.ALLOWED_JOIN_TYPES:
                     raise ValueError(f"Tipo de JOIN inválido: {join_type}")
-                join_table = j.get("table", "")
+
+                join_table_name, join_alias = self._parse_table_alias(j.get("table", ""))
                 left, right = j.get("left"), j.get("right")
-                sql += f" {join_type} JOIN {join_table} ON {left} = {right}"
+
+                sql += f" {join_type} JOIN {join_table_name}"
+                if join_alias:
+                    sql += f" AS {join_alias}"
+                sql += f" ON {left} = {right}"
 
             # ======================================================
             # 🔹 WHERE
@@ -178,39 +178,20 @@ class DataRepository(BaseRepository):
     # 🔹 CONSTRUÇÃO RECURSIVA DOS FILTROS
     # ======================================================
     def _build_filter_clause(self, filters: dict) -> str:
-        """
-        Monta recursivamente os filtros SQL com suporte a 'and' / 'or' aninhados.
-        Compatível com o alias interno do Pydantic ('and_' e 'or_').
-        """
         if not filters:
             return ""
 
-        # 🧩 Suporte tanto a 'and' quanto 'and_'
         if isinstance(filters, dict):
             and_key = "and" if "and" in filters else "and_" if "and_" in filters else None
             or_key = "or" if "or" in filters else "or_" if "or_" in filters else None
 
-            # 🔹 AND lógico
             if and_key:
-                subfilters = filters[and_key]
-                clauses = []
-                for f in subfilters:
-                    clause = self._build_filter_clause(f)
-                    if clause:
-                        clauses.append(clause)
-                return f"({' AND '.join(clauses)})" if clauses else ""
-
-            # 🔹 OR lógico
+                clauses = [self._build_filter_clause(f) for f in filters[and_key] if f]
+                return f"({' AND '.join([c for c in clauses if c])})"
             if or_key:
-                subfilters = filters[or_key]
-                clauses = []
-                for f in subfilters:
-                    clause = self._build_filter_clause(f)
-                    if clause:
-                        clauses.append(clause)
-                return f"({' OR '.join(clauses)})" if clauses else ""
+                clauses = [self._build_filter_clause(f) for f in filters[or_key] if f]
+                return f"({' OR '.join([c for c in clauses if c])})"
 
-            # 🔹 Caso base — dicionário simples {campo: {op, value}}
             parts = []
             for field, cond in filters.items():
                 if not isinstance(cond, dict) or "op" not in cond:
@@ -221,27 +202,33 @@ class DataRepository(BaseRepository):
                 if op not in self.ALLOWED_OPERATORS:
                     raise ValueError(f"Operador não permitido: {op}")
 
-                # Construção da cláusula
                 if op in ("IS NULL", "IS NOT NULL"):
-                    part = f"{field} {op}"
+                    parts.append(f"{field} {op}")
                 elif op in ("IN", "NOT IN"):
                     val_str = ", ".join(f"'{v}'" for v in val)
-                    part = f"{field} {op} ({val_str})"
+                    parts.append(f"{field} {op} ({val_str})")
                 elif op == "BETWEEN":
                     if not isinstance(val, list) or len(val) != 2:
                         raise ValueError("BETWEEN requer [min, max]")
-                    part = f"{field} BETWEEN '{val[0]}' AND '{val[1]}'"
+                    parts.append(f"{field} BETWEEN '{val[0]}' AND '{val[1]}'")
                 else:
-                    part = f"{field} {op} '{val}'"
-
-                parts.append(part)
-
+                    parts.append(f"{field} {op} '{val}'")
             return " AND ".join(parts)
 
-        # 🔹 Caso improvável: lista direta
         if isinstance(filters, list):
-            clauses = [self._build_filter_clause(f) for f in filters]
-            clauses = [c for c in clauses if c]
-            return " AND ".join(clauses)
-
+            return " AND ".join([c for c in [self._build_filter_clause(f) for f in filters] if c])
         return ""
+
+    # ======================================================
+    # 🔹 SUPORTE A ALIAS
+    # ======================================================
+    def _parse_table_alias(self, table_name: str) -> tuple[str, str | None]:
+        """
+        Retorna (tabela, alias) a partir de 'SB1010 AS P' ou 'SB1010 P'.
+        """
+        if not table_name:
+            return "", None
+        parts = re.split(r"\s+AS\s+|\s+", table_name.strip(), flags=re.IGNORECASE)
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        return table_name.strip(), None

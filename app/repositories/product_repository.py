@@ -32,7 +32,7 @@ class ProductRepository(BaseRepository):
         """
         return self.execute_query(query)
     
-    def list_teste(self) -> list[dict]:
+    def list_teste(self) -> dict:
         log_info("Executando correlação SD4010 ↔ SH8010...")
         query = """
             SELECT 
@@ -40,22 +40,49 @@ class ProductRepository(BaseRepository):
                 SD4.D4_FILIAL,
                 SD4.D4_OPERAC,
                 SH8.H8_OP,
-                SH8.H8_OPER,
-                SD4.D4_SLDEMP,
+                SD4.D4_COD,
                 SH8.H8_CTRAB,
-                SH8.H8_DTINI
+                SH8.H8_DTINI,
+                (SD4.D4_SLDEMP * 1000) AS D4_SLDEMP_MAP,
+                SB2.B2_QATU,
+                SB2.B2_LOCAL
             FROM SD4010 AS SD4
             INNER JOIN SH8010 AS SH8
                 ON SD4.D4_OP = SH8.H8_OP
                 AND SD4.D4_OPERAC = SH8.H8_OPER
+            INNER JOIN SB2010 AS SB2
+                ON SD4.D4_COD = SB2.B2_COD
             WHERE 
                 SD4.D_E_L_E_T_ = ''
                 AND SH8.D_E_L_E_T_ = ''
+                AND SB2.D_E_L_E_T_ = ''
+                AND (SB2.B2_LOCAL = '01' OR SB2.B2_LOCAL = '99')
                 AND SD4.D4_SLDEMP > 0
             ORDER BY 
                 SD4.D4_OP, SD4.D4_OPERAC;
         """
-        return self.execute_query(query)
+        query=""""
+SELECT
+    SB2.B2_FILIAL,
+    SB2.B2_COD,
+    MAX(CASE WHEN SB2.B2_LOCAL = '01' THEN SB2.B2_QATU END) AS QATU_LOCAL_01,
+    MAX(CASE WHEN SB2.B2_LOCAL = '99' THEN SB2.B2_QATU END) AS QATU_LOCAL_99
+FROM 
+    SB2010 AS SB2
+WHERE
+    SB2.D_E_L_E_T_ = ''
+    AND SB2.B2_LOCAL IN ('01', '99')
+GROUP BY
+    SB2.B2_FILIAL,
+    SB2.B2_COD;
+
+        """
+
+        result = {}
+        dados = self.execute_query(query)
+        result["dados"] = dados
+        result["total"] = len(result["dados"])
+        return result
 
 
     # -------------------------------

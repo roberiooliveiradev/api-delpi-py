@@ -7,7 +7,7 @@ from app.routes import product_routes   # Rotas de produtos
 from app.routes import system_routes   # Rotas de produtos
 from app.routes import data_routes  # Rota genérica
 # SERVER_URL = " http://127.0.0.1:3000/"
-SERVER_URL = "https://bc32100282b1.ngrok-free.app"
+SERVER_URL = " https://0face43d5ce4.ngrok-free.app"
 # Instância principal do app FastAPI
 app = FastAPI(
     title="API TOTVS Protheus",
@@ -33,6 +33,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Configurações automáticas do agente GPT
+app.state.agent_config = {
+    "auto_execute_api": settings.AUTO_EXECUTE_API,
+    "confirm_before_request": settings.CONFIRM_BEFORE_REQUEST,
+    "show_payload_before_execute": settings.SHOW_PAYLOAD_BEFORE_EXECUTE,
+}
+
 
 # Rota raiz — teste rápido da API
 @app.get("/", tags=["Health Check"])
