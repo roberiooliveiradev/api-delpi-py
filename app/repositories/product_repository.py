@@ -2,7 +2,8 @@
 from app.repositories.base_repository import BaseRepository
 from app.core.exceptions import BusinessLogicError
 from app.utils.logger import log_info, log_error
-
+from typing import Optional
+from datetime import datetime
 
 class ProductRepository(BaseRepository):
     """
@@ -62,19 +63,19 @@ class ProductRepository(BaseRepository):
                 SD4.D4_OP, SD4.D4_OPERAC;
         """
         query=""""
-SELECT
-    SB2.B2_FILIAL,
-    SB2.B2_COD,
-    MAX(CASE WHEN SB2.B2_LOCAL = '01' THEN SB2.B2_QATU END) AS QATU_LOCAL_01,
-    MAX(CASE WHEN SB2.B2_LOCAL = '99' THEN SB2.B2_QATU END) AS QATU_LOCAL_99
-FROM 
-    SB2010 AS SB2
-WHERE
-    SB2.D_E_L_E_T_ = ''
-    AND SB2.B2_LOCAL IN ('01', '99')
-GROUP BY
-    SB2.B2_FILIAL,
-    SB2.B2_COD;
+            SELECT
+                SB2.B2_FILIAL,
+                SB2.B2_COD,
+                MAX(CASE WHEN SB2.B2_LOCAL = '01' THEN SB2.B2_QATU END) AS QATU_LOCAL_01,
+                MAX(CASE WHEN SB2.B2_LOCAL = '99' THEN SB2.B2_QATU END) AS QATU_LOCAL_99
+            FROM 
+                SB2010 AS SB2
+            WHERE
+                SB2.D_E_L_E_T_ = ''
+                AND SB2.B2_LOCAL IN ('01', '99')
+            GROUP BY
+                SB2.B2_FILIAL,
+                SB2.B2_COD;
 
         """
 
@@ -258,6 +259,226 @@ GROUP BY
             "data": hierarchy,
         }
 
+    # -------------------------------
+    # 🔹 SUPPLIERS
+    # -------------------------------
+    def list_suppliers(self, code: str, page: int = 1, page_size: int = 50) -> dict:
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
+
+        log_info(f"Listando fornecedores de {code}, página {page}, tamanho {page_size}")
+        offset = (page - 1) * page_size
+
+        # Contagem total
+        count_query = """
+            SELECT COUNT(*) AS total
+            FROM SA5010 AS SA5
+            WHERE SA5.D_E_L_E_T_ = ''
+            AND SA5.A5_PRODUTO = ?
+        """
+        total_row = self.execute_one(count_query, (code,))
+        total_rows = int(total_row["total"] or 0)
+
+        # Consulta paginada
+        query = """
+            SELECT *
+            FROM SA5010 AS SA5
+            WHERE SA5.D_E_L_E_T_ = ''
+            AND SA5.A5_PRODUTO = ?
+            ORDER BY SA5.A5_FORNECE
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+        data = self.execute_query(query, (code, offset, page_size))
+
+        return {
+            "success": True,
+            "total": total_rows,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total_rows + page_size - 1) // page_size,
+            "data": data
+        }
+    
+    # -------------------------------
+    # 🔹 INBOUND INVOICE ITEMS (Notas Fiscais de Entrada)
+    # -------------------------------
+    def list_inbound_invoice_items(
+        self,
+        code: str,
+        page: int = 1,
+        page_size: int = 50,
+        issue_date_start: Optional[str] = None,
+        issue_date_end: Optional[str] = None,
+        supplier: Optional[str] = None,
+        branch: Optional[str] = None
+    ) -> dict:
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
+
+        offset = (page - 1) * page_size
+        log_info(f"Listando NF-es de entrada de {code}, página {page}, filtros aplicados.")
+
+        filters = []
+        params = [code]
+
+        if issue_date_start:
+            filters.append("SD1.D1_EMISSAO >= ?")
+            issue_date_start = self._convert_date_to_protheus(issue_date_start)
+            params.append(issue_date_start)
+        if issue_date_end:
+            filters.append("SD1.D1_EMISSAO <= ?")
+            issue_date_end = self._convert_date_to_protheus(issue_date_end)
+            params.append(issue_date_end)
+        if supplier:
+            filters.append("SD1.D1_FORNECE = ?")
+            params.append(supplier)
+        if branch:
+            filters.append("SD1.D1_FILIAL = ?")
+            params.append(branch)
+
+        where_clause = " AND ".join(filters)
+        if where_clause:
+            where_clause = " AND " + where_clause
+
+        # Contagem total
+        count_query = f"""
+            SELECT COUNT(*) AS total
+            FROM SD1010 AS SD1
+            WHERE SD1.D_E_L_E_T_ = ''
+              AND SD1.D1_COD = ? {where_clause}
+        """
+        total_row = self.execute_one(count_query, tuple(params))
+        total_rows = int(total_row["total"] or 0)
+
+        # Dados paginados
+        query = f"""
+            SELECT 
+                SD1.*,
+                SA2.A2_NOME AS supplier_name
+            FROM SD1010 AS SD1
+            LEFT JOIN SA2010 AS SA2
+                ON SA2.A2_COD = SD1.D1_FORNECE AND SA2.D_E_L_E_T_ = ''
+            WHERE SD1.D_E_L_E_T_ = ''
+              AND SD1.D1_COD = ? {where_clause}
+            ORDER BY SD1.D1_EMISSAO DESC
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+        params.extend([offset, page_size])
+        data = self.execute_query(query, tuple(params))
+
+        return {
+            "success": True,
+            "total": total_rows,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total_rows + page_size - 1) // page_size,
+            "filters": {
+                "issue_date_start": issue_date_start,
+                "issue_date_end": issue_date_end,
+                "supplier": supplier,
+                "branch": branch
+            },
+            "data": data
+        }
+
+    # -------------------------------
+    # 🔹 OUTBOUND INVOICE ITEMS (Notas Fiscais de Saída)
+    # -------------------------------
+    def list_outbound_invoice_items(
+        self,
+        code: str,
+        page: int = 1,
+        page_size: int = 50,
+        issue_date_start: Optional[str] = None,
+        issue_date_end: Optional[str] = None,
+        customer: Optional[str] = None,
+        branch: Optional[str] = None
+    ) -> dict:
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
+
+        offset = (page - 1) * page_size
+        log_info(f"Listando NF-es de saída de {code}, página {page}, filtros aplicados.")
+
+        filters = []
+        params = [code]
+
+        if issue_date_start:
+            filters.append("SD2.D2_EMISSAO >= ?")
+            issue_date_start = self._convert_date_to_protheus(issue_date_start)
+            params.append(issue_date_start)
+        if issue_date_end:
+            filters.append("SD2.D2_EMISSAO <= ?")
+            issue_date_end = self._convert_date_to_protheus(issue_date_end)
+            params.append(issue_date_end)
+        if customer:
+            filters.append("SD2.D2_CLIENTE = ?")
+            params.append(customer)
+        if branch:
+            filters.append("SD2.D2_FILIAL = ?")
+            params.append(branch)
+
+        where_clause = " AND ".join(filters)
+        if where_clause:
+            where_clause = " AND " + where_clause
+
+        # Contagem total
+        count_query = f"""
+            SELECT COUNT(*) AS total
+            FROM SD2010 AS SD2
+            WHERE SD2.D_E_L_E_T_ = ''
+              AND SD2.D2_COD = ? {where_clause}
+        """
+        total_row = self.execute_one(count_query, tuple(params))
+        total_rows = int(total_row["total"] or 0)
+
+        # Dados paginados
+        query = f"""
+            SELECT 
+                SD2.*,
+                SA1.A1_NOME AS customer_name
+            FROM SD2010 AS SD2
+            LEFT JOIN SA1010 AS SA1
+                ON SA1.A1_COD = SD2.D2_CLIENTE AND SA1.D_E_L_E_T_ = ''
+            WHERE SD2.D_E_L_E_T_ = ''
+              AND SD2.D2_COD = ? {where_clause}
+            ORDER BY SD2.D2_EMISSAO DESC
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+        params.extend([offset, page_size])
+        data = self.execute_query(query, tuple(params))
+
+        return {
+            "success": True,
+            "total": total_rows,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total_rows + page_size - 1) // page_size,
+            "filters": {
+                "issue_date_start": issue_date_start,
+                "issue_date_end": issue_date_end,
+                "customer": customer,
+                "branch": branch
+            },
+            "data": data
+        }
+
+    def _convert_date_to_protheus(date_str: Optional[str]) -> Optional[str]:
+        """
+        Converte 'YYYY-MM-DD' → 'YYYYMMDD' (padrão Protheus).
+        """
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y%m%d")
+        except ValueError:
+            return None
 
     def _build_hierarchy(self, rows: list[dict], root_code: str, mode: str = "structure") -> dict:
         """

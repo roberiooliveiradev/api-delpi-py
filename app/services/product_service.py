@@ -3,6 +3,7 @@ from app.repositories.product_repository import ProductRepository
 from app.models.product_model import Product
 from app.utils.logger import log_info, log_error
 from app.core.exceptions import BusinessLogicError, DatabaseConnectionError
+from typing import Optional
 
 def get_product(code: str) -> Product:
     """
@@ -67,3 +68,46 @@ def get_parents(code: str, max_depth: int = 10, page: int = 1, page_size: int = 
         log_error(f"Erro ao listar produtos pai do item {code}: {e}")
         raise DatabaseConnectionError(str(e))
 
+def get_suppliers(code: str, page: int = 1, page_size: int = 50) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando fornecedores para {code} (página {page})")
+    try:
+        return repo.list_suppliers(code, page, page_size)
+    except Exception as e:
+        log_error(f"Erro ao listar fornecedores para {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+    
+def get_inbound_invoice_items(
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    issue_date_start: Optional[str] = None,
+    issue_date_end: Optional[str] = None,
+    supplier: Optional[str] = None,
+    branch: Optional[str] = None
+) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando NF-es de entrada de {code} (página {page})")
+    try:
+        return repo.list_inbound_invoice_items(code, page, page_size, issue_date_start, issue_date_end, supplier, branch)
+    except Exception as e:
+        log_error(f"Erro ao listar NF-es de entrada para {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+
+
+def get_outbound_invoice_items(
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    issue_date_start: Optional[str] = None,
+    issue_date_end: Optional[str] = None,
+    customer: Optional[str] = None,
+    branch: Optional[str] = None
+) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando NF-es de saída de {code} (página {page})")
+    try:
+        return repo.list_outbound_invoice_items(code, page, page_size, issue_date_start, issue_date_end, customer, branch)
+    except Exception as e:
+        log_error(f"Erro ao listar NF-es de saída para {code}: {e}")
+        raise DatabaseConnectionError(str(e))
