@@ -41,8 +41,7 @@ class ProductRepository(BaseRepository):
         description: str,
         page: int = 1,
         page_size: int = 50,
-    ) -> dict:
-
+    ):
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
@@ -56,31 +55,121 @@ class ProductRepository(BaseRepository):
         terms = [t.strip() for t in desc_clean.split() if t.strip()]
         desc_length = len(desc_clean)
 
+        # =====================================================
         # WHERE
+        # =====================================================
         where_clauses = ["SB1.D_E_L_E_T_ = ''"]
+        where_params = []
+
+        # Sempre busca frase completa
         where_clauses.append("SB1.B1_DESC LIKE ?")
-        where_params = [f"%{desc_clean}%"]
+        where_params.append(f"%{desc_clean}%")
 
-        # Score
-        score_parts = []
-        score_params = []
-
-        # Score baseado em frase completa
-        score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
-        score_params.append(f"%{desc_clean}%")
-
-        # Score pelos termos individuais
-        for t in terms:
-            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 10 ELSE 0 END")
-
-        # Similaridade de tamanho
-        score_parts.append(f"(10 - ABS(LEN(SB1.B1_DESC) - {desc_length}))")
-
-        score_sql = " + ".join(score_parts)
+        # Termos separados (somente se mais de uma palavra)
+        if len(terms) > 1:
+            term_clauses = []
+            for t in terms:
+                term_clauses.append("SB1.B1_DESC LIKE ?")
+                where_params.append(f"%{t}%")
+            where_clauses.append("(" + " OR ".join(term_clauses) + ")")
 
         where_sql = " AND ".join(where_clauses)
 
+        # =====================================================
+        # SCORE (RANKING)
+        # =====================================================
+        score_parts = []
+        score_params = []
+
+        # Frase completa
+        score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+        score_params.append(f"%{desc_clean}%")
+
+        if len(terms) == 1:
+            # =====================
+            # Uma única palavra
+            # =====================
+            term = terms[0]
+
+            # 1. Frase completa (mantém)
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+            score_params.append(f"%{desc_clean}%")
+
+            # 2. Termo começa exatamente a descrição
+            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '{term} %' THEN 30 ELSE 0 END")
+
+            # 3. Termo inicia uma palavra (meio da descrição)
+            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '% {term} %' THEN 20 ELSE 0 END")
+
+            # 4. Termo presente em qualquer lugar
+            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{term}%' THEN 10 ELSE 0 END")
+
+            # 5. Similaridade normalizada por tamanho (cast p/ evitar decimal)
+            score_parts.append(
+                f"""
+                CAST(
+                    CASE 
+                        WHEN LEN(SB1.B1_DESC) = 0 THEN 0
+                        ELSE ROUND(
+                            10 * (
+                                1.0 - ABS(LEN(SB1.B1_DESC) - {len(term)}) /
+                                (CASE 
+                                    WHEN LEN(SB1.B1_DESC) > {len(term)} THEN LEN(SB1.B1_DESC)
+                                    ELSE {len(term)}
+                                END)
+                            ), 
+                        0)
+                    END
+                AS INT)
+                """
+            )
+
+
+        else:
+            # =====================
+            # Várias palavras
+            # =====================
+            # 1. Frase completa
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+            score_params.append(f"%{desc_clean}%")
+
+            for t in terms:
+
+                # termo no início da descrição
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '{t} %' THEN 25 ELSE 0 END")
+
+                # termo iniciando uma palavra mais à frente
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '% {t} %' THEN 15 ELSE 0 END")
+
+                # termo presente em qualquer lugar
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 5 ELSE 0 END")
+
+            # Similaridade normalizada da frase inteira
+            score_parts.append(
+                f"""
+                CAST(
+                    CASE 
+                        WHEN LEN(SB1.B1_DESC) = 0 THEN 0
+                        ELSE ROUND(
+                            10 * (
+                                1.0 - ABS(LEN(SB1.B1_DESC) - {desc_length}) /
+                                (CASE 
+                                    WHEN LEN(SB1.B1_DESC) > {desc_length} THEN LEN(SB1.B1_DESC)
+                                    ELSE {desc_length}
+                                END)
+                            ), 
+                        0)
+                    END
+                AS INT)
+                """
+            )
+
+
+        score_sql = " + ".join(score_parts)
+
+        # =====================================================
         # COUNT
+        # =====================================================
         count_sql = f"""
             SELECT COUNT(*) AS total
             FROM SB1010 AS SB1
@@ -88,19 +177,21 @@ class ProductRepository(BaseRepository):
         """
         total_rows = int(self.execute_one(count_sql, tuple(where_params))["total"] or 0)
 
-        # RESULT
+        # =====================================================
+        # RESULT QUERY
+        # =====================================================
         sql = f"""
             SELECT 
                 SB1.*,
                 ({score_sql}) AS relevance_score
             FROM SB1010 AS SB1
             WHERE {where_sql}
-            ORDER BY relevance_score DESC, SB1.B1_DESC
+            ORDER BY relevance_score DESC, SB1.B1_COD ASC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        params = score_params + where_params + [offset, page_size]
-        rows = self.execute_query(sql, tuple(params))
+        final_params = score_params + where_params + [offset, page_size]
+        rows = self.execute_query(sql, tuple(final_params))
 
         return {
             "success": True,
@@ -111,7 +202,6 @@ class ProductRepository(BaseRepository):
             "description": description,
             "results": rows
         }
-
 
     # -------------------------------
     # 🔹 SEACH PRODUCTS BY CODE, DESCRIPTION OR GROUP
@@ -138,12 +228,10 @@ class ProductRepository(BaseRepository):
         where_clauses = ["SB1.D_E_L_E_T_ = ''"]
         where_params: list[str] = []
 
-        # code
         if code:
             where_clauses.append("SB1.B1_COD LIKE ?")
             where_params.append(f"%{code}%")
 
-        # description
         terms: list[str] = []
         desc_clean: Optional[str] = None
         desc_length = 0
@@ -155,11 +243,9 @@ class ProductRepository(BaseRepository):
 
             desc_conditions: list[str] = []
 
-            # frase completa
             desc_conditions.append("SB1.B1_DESC LIKE ?")
             where_params.append(f"%{desc_clean}%")
 
-            # termos individuais
             if terms:
                 t_clauses: list[str] = []
                 for t in terms:
@@ -169,7 +255,6 @@ class ProductRepository(BaseRepository):
 
             where_clauses.append("(" + " OR ".join(desc_conditions) + ")")
 
-        # group
         if group:
             where_clauses.append("SB1.B1_GRUPO = ?")
             where_params.append(group)
@@ -192,20 +277,44 @@ class ProductRepository(BaseRepository):
         score_parts: list[str] = []
         score_params: list[str] = []
 
-        # Habilitar score SOMENTE se houver 2 ou mais termos
         enable_score = description and desc_clean and len(terms) > 1
 
         if enable_score:
-            # 1) frase completa → primeiro parâmetro do score
+            # 1. Frase completa
             score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
             score_params.append(f"%{desc_clean}%")
 
-            # 2) termos → inline (sem parâmetros)
             for t in terms:
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 10 ELSE 0 END")
 
-            # 3) similaridade de tamanho
-            score_parts.append(f"(10 - ABS(LEN(SB1.B1_DESC) - {desc_length}))")
+                # termo no início da descrição
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '{t} %' THEN 25 ELSE 0 END")
+
+                # termo iniciando uma palavra mais à frente
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '% {t} %' THEN 15 ELSE 0 END")
+
+                # termo presente em qualquer lugar
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 5 ELSE 0 END")
+
+            # Similaridade normalizada da frase inteira
+            score_parts.append(
+                f"""
+                CAST(
+                    CASE 
+                        WHEN LEN(SB1.B1_DESC) = 0 THEN 0
+                        ELSE ROUND(
+                            10 * (
+                                1.0 - ABS(LEN(SB1.B1_DESC) - {desc_length}) /
+                                (CASE 
+                                    WHEN LEN(SB1.B1_DESC) > {desc_length} THEN LEN(SB1.B1_DESC)
+                                    ELSE {desc_length}
+                                END)
+                            ), 
+                        0)
+                    END
+                AS INT)
+                """
+            )
+
 
         score_sql = " + ".join(score_parts) if enable_score else "0"
 
@@ -218,18 +327,13 @@ class ProductRepository(BaseRepository):
                 ({score_sql}) AS relevance_score
             FROM SB1010 AS SB1
             WHERE {where_sql}
-            ORDER BY 
-                relevance_score DESC,
-                SB1.B1_COD ASC
+            ORDER BY relevance_score DESC, SB1.B1_COD ASC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        # ORDEM CORRETA DOS PARÂMETROS
-        # Score somente se enable_score == True
         if enable_score:
             final_params = score_params + where_params + [offset, page_size]
         else:
-            # SEM SCORE → Apenas where_params
             final_params = where_params + [offset, page_size]
 
         rows = self.execute_query(final_sql, tuple(final_params))
