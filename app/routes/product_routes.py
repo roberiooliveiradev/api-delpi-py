@@ -5,9 +5,19 @@ from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
 from app.repositories.base_repository import BaseRepository
+from pydantic import BaseModel
 from typing import Optional
 
+
+class ProductSearchRequest(BaseModel):
+    page: int = 1
+    page_size: int = 50
+    code: Optional[str] = None
+    description: Optional[str] = None
+    group: Optional[str] = None
+
 router = APIRouter()
+
 
 @router.get("/", summary="Listagem de produtos com limite")
 def products(limit: int = Query(50, ge=1, le=200)):
@@ -44,24 +54,24 @@ def search_products_by_description_route(
         return error_response(f"Erro inesperado: {e}")
 
 
-
-@router.get("/search", summary="Pesquisa de produtos com filtros e paginação")
-def search_products_route(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=500),
-    code: Optional[str] = Query(None, description="Pesquisar por código (LIKE)"),
-    description: Optional[str] = Query(None, description="Pesquisar por descrição (LIKE)"),
-    group: Optional[str] = Query(None, description="Código do grupo B1_GRUPO")
-):
+@router.post("/search", summary="Pesquisa de produtos via POST, com filtros e paginação")
+def search_products_post_route(body: ProductSearchRequest):
     try:
-        result = search_products(page, page_size, code, description, group)
+        result = search_products(
+            body.page,
+            body.page_size,
+            body.code,
+            body.description,
+            body.group
+        )
         return success_response(
             data=result,
-            message=f"Pesquisa de produtos realizada com sucesso (página {page}/{result['totalPages']})."
+            message=f"Pesquisa de produtos realizada com sucesso (página {body.page}/{result['totalPages']})."
         )
     except Exception as e:
         log_error(f"Erro ao pesquisar produtos: {e}")
         return error_response(f"Erro inesperado: {e}")
+    
 
 @router.get("/{code}", summary="Consulta produto por código")
 def product(code: str):
