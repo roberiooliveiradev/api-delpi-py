@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description, search_products_by_params
+from app.services.product_service import get_product, get_products, get_structure, get_parents
+from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
@@ -42,29 +43,6 @@ def search_products_by_description_route(
         log_error(f"Erro na busca pela descrição: {e}")
         return error_response(f"Erro inesperado: {e}")
 
-
-@router.get("/search-by-params", summary="Pesquisa de produtos com filtros e paginação")
-def search_products_by_params_route(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=500),
-    code: Optional[str] = Query(None, description="Pesquisar por código (LIKE)"),
-    description: Optional[str] = Query(None, description="Pesquisar por descrição (LIKE)"),
-    # group: Optional[str] = Query(None, description="Código do grupo B1_GRUPO")
-):
-    try:
-        result = search_products_by_params(page, 
-                                           page_size, 
-                                        #    code, 
-                                           description, 
-                                        #    group
-                                           )
-        return success_response(
-            data=result,
-            message=f"Pesquisa de produtos realizada com sucesso (página {page}/{result['totalPages']})."
-        )
-    except Exception as e:
-        log_error(f"Erro ao pesquisar produtos: {e}")
-        return error_response(f"Erro inesperado: {e}")
 
 
 @router.get("/search", summary="Pesquisa de produtos com filtros e paginação")

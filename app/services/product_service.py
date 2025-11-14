@@ -52,29 +52,6 @@ def search_products_by_description(
         raise DatabaseConnectionError(str(e))
 
 
-
-def search_products_by_params(
-    page: int = 1,
-    page_size: int = 50,
-    # code: Optional[str] = None,
-    description: Optional[str] = None,
-    # group: Optional[str] = None
-) -> dict:
-    repo = ProductRepository()
-    log_info(f"Buscando produtos (page={page}) com filtros aplicados")
-    try:
-        return repo.search_products(
-            page, 
-            page_size, 
-            # code, 
-            description, 
-            # group
-            )
-    except Exception as e:
-        log_error(f"Erro ao pesquisar produtos: {e}")
-        raise DatabaseConnectionError(str(e))
-
-
 def search_products(
     page: int = 1,
     page_size: int = 50,
