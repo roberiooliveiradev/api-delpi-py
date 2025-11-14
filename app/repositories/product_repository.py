@@ -34,7 +34,87 @@ class ProductRepository(BaseRepository):
         return self.execute_query(query)
     
     # -------------------------------
-    # 🔹 SEACH PRODUCTS FOR CODE, DESCRIPTION OR GROUP
+    # 🔹 SEACH PRODUCTS BY DESCRIPTION 
+    # -------------------------------
+    def search_by_description(
+        self,
+        description: str,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict:
+
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
+        if not description:
+            raise ValueError("Description cannot be empty")
+
+        offset = (page - 1) * page_size
+
+        desc_clean = description.strip()
+        terms = [t.strip() for t in desc_clean.split() if t.strip()]
+        desc_length = len(desc_clean)
+
+        # WHERE
+        where_clauses = ["SB1.D_E_L_E_T_ = ''"]
+        where_clauses.append("SB1.B1_DESC LIKE ?")
+        where_params = [f"%{desc_clean}%"]
+
+        # Score
+        score_parts = []
+        score_params = []
+
+        # Score baseado em frase completa
+        score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+        score_params.append(f"%{desc_clean}%")
+
+        # Score pelos termos individuais
+        for t in terms:
+            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 10 ELSE 0 END")
+
+        # Similaridade de tamanho
+        score_parts.append(f"(10 - ABS(LEN(SB1.B1_DESC) - {desc_length}))")
+
+        score_sql = " + ".join(score_parts)
+
+        where_sql = " AND ".join(where_clauses)
+
+        # COUNT
+        count_sql = f"""
+            SELECT COUNT(*) AS total
+            FROM SB1010 AS SB1
+            WHERE {where_sql}
+        """
+        total_rows = int(self.execute_one(count_sql, tuple(where_params))["total"] or 0)
+
+        # RESULT
+        sql = f"""
+            SELECT 
+                SB1.*,
+                ({score_sql}) AS relevance_score
+            FROM SB1010 AS SB1
+            WHERE {where_sql}
+            ORDER BY relevance_score DESC, SB1.B1_DESC
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+
+        params = score_params + where_params + [offset, page_size]
+        rows = self.execute_query(sql, tuple(params))
+
+        return {
+            "success": True,
+            "total": total_rows,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total_rows + page_size - 1) // page_size,
+            "description": description,
+            "results": rows
+        }
+
+
+    # -------------------------------
+    # 🔹 SEACH PRODUCTS BY CODE, DESCRIPTION OR GROUP
     # -------------------------------
     def search_products(
         self,

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
@@ -22,6 +22,26 @@ def products(limit: int = Query(50, ge=1, le=200)):
     except Exception as e:
         log_error(f"Erro ao listar produtos: {e}")
         return error_response(f"Erro inesperado: {e}")
+    
+@router.get(
+    "/search/description",
+    summary="Busca específica por descrição, com paginação e score"
+)
+def search_products_by_description_route(
+    description: str = Query(..., description="Descrição ou termos"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+):
+    try:
+        result = search_products_by_description(description, page, page_size)
+        return success_response(
+            data=result,
+            message=f"Busca por descrição realizada com sucesso (página {page}/{result['totalPages']})."
+        )
+    except Exception as e:
+        log_error(f"Erro na busca pela descrição: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
 
 @router.get("/search", summary="Pesquisa de produtos com filtros e paginação")
 def search_products_route(

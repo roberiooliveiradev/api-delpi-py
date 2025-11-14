@@ -38,6 +38,21 @@ def get_products(limit: int = 10) -> list[Product]:
         log_error(f"Erro ao listar produtos: {e}")
         raise DatabaseConnectionError(str(e))
 
+def search_products_by_description(
+    description: str,
+    page: int = 1,
+    page_size: int = 50
+) -> dict:
+    repo = ProductRepository()
+    log_info(f"Search only by description (page={page})")
+    try:
+        return repo.search_by_description(description, page, page_size)
+    except Exception as e:
+        log_error(f"Erro ao pesquisar produtos por descrição: {e}")
+        raise DatabaseConnectionError(str(e))
+
+
+
 def search_products(
     page: int = 1,
     page_size: int = 50,
