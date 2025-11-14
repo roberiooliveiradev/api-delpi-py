@@ -69,7 +69,60 @@ GET /product?limit=20
 
 ---
 
-### 🔹 2. Consultar produto específico
+### 🔹 2. Pesquisa de Produtos
+
+> A rota permite pesquisar produtos por **código**, **descrição** e **grupo**, com paginação.
+
+```http
+GET /product/search?page=1&page_size=50&code=100&description=terminal&group=1008
+```
+
+| Parâmetro     | Tipo | Obrigatório | Descrição                                         |
+| ------------- | ---- | ----------- | ------------------------------------------------- |
+| `page`        | int  | ✖           | Página atual (default: 1)                         |
+| `page_size`   | int  | ✖           | Registros por página (default: 50, máx: 500)      |
+| `code`        | str  | ✖           | Pesquisa por código (`B1_COD LIKE '%valor%'`)     |
+| `description` | str  | ✖           | Pesquisa por descrição (`B1_DESC LIKE '%valor%'`) |
+| `group`       | str  | ✖           | Filtro por grupo (`B1_GRUPO`)                     |
+
+**Exemplo de requisição**
+
+```http
+GET /product/search?page=1&page_size=20&description=terminal
+```
+
+**Resposta:**
+
+```json
+{
+    "success": true,
+    "message": "Pesquisa de produtos realizada com sucesso (página 1/3).",
+    "data": {
+        "total": 58,
+        "page": 1,
+        "pageSize": 20,
+        "totalPages": 3,
+        "filters": {
+            "code": null,
+            "description": "terminal",
+            "group": null
+        },
+        "data": [
+            {
+                "B1_COD": "10080522",
+                "B1_DESC": "TERMINAL BANDEIRA 6,30X0,80MM2",
+                "B1_GRUPO": "1008",
+                "B1_UM": "UN",
+                "B1_TIPO": "PA"
+            }
+        ]
+    }
+}
+```
+
+---
+
+### 🔹 3. Consultar produto específico
 
 ```http
 GET /product/10080522
@@ -93,7 +146,7 @@ GET /product/10080522
 
 ---
 
-### 🔹 3. Estrutura do produto (BOM)
+### 🔹 4. Estrutura do produto (BOM)
 
 ```http
 GET /product/10080522/structure?max_depth=10&page=1&page_size=50
@@ -127,7 +180,7 @@ GET /product/10080522/structure?max_depth=10&page=1&page_size=50
 
 ---
 
-### 🔹 4. Produtos pais (Where Used)
+### 🔹 5. Produtos pais (Where Used)
 
 ```http
 GET /product/20010001/parents?max_depth=5&page=1&page_size=50
@@ -159,7 +212,7 @@ GET /product/20010001/parents?max_depth=5&page=1&page_size=50
 
 ---
 
-### 🔹 5. Notas Fiscais de Entrada (Inbound)
+### 🔹 6. Notas Fiscais de Entrada (Inbound)
 
 ```http
 GET /product/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&supplier=000001&branch=01
@@ -211,7 +264,7 @@ GET /product/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=2
 
 ---
 
-### 🔹 6. Notas Fiscais de Saída (Outbound)
+### 🔹 7. Notas Fiscais de Saída (Outbound)
 
 ```http
 GET /product/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&customer=000001&branch=01
@@ -263,7 +316,7 @@ GET /product/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start=
 
 ---
 
-### 🔹 7. Estoque
+### 🔹 8. Estoque
 
 ```http
 GET /product/{code}/stock?page=1&page_size=50&branch=01&location=01

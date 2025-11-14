@@ -32,9 +32,82 @@ class ProductRepository(BaseRepository):
             ORDER BY B1_COD
         """
         return self.execute_query(query)
+    
+    # -------------------------------
+    # 🔹 SEACH PRODUCTS FOR CODE, DESCRIPTION OR GROUP
+    # -------------------------------
+    def search_products(
+        self,
+        page: int = 1,
+        page_size: int = 50,
+        code: Optional[str] = None,
+        description: Optional[str] = None,
+        group: Optional[str] = None
+    ) -> dict:
+
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
+
+        offset = (page - 1) * page_size
+
+        filters = ["SB1.D_E_L_E_T_ = ''"]
+        params = []
+
+        if code:
+            filters.append("SB1.B1_COD LIKE ?")
+            params.append(f"%{code}%")
+
+        if description:
+            filters.append("SB1.B1_DESC LIKE ?")
+            params.append(f"%{description}%")
+
+        if group:
+            filters.append("SB1.B1_GRUPO = ?")
+            params.append(group)
+
+        where_clause = " AND ".join(filters)
+
+        # Contagem total
+        count_query = f"""
+            SELECT COUNT(*) AS total
+            FROM SB1010 AS SB1
+            WHERE {where_clause}
+        """
+        total_row = self.execute_one(count_query, tuple(params))
+        total_rows = int(total_row["total"] or 0)
+
+        # Dados paginados
+        data_query = f"""
+            SELECT SB1.*
+            FROM SB1010 AS SB1
+            WHERE {where_clause}
+            ORDER BY SB1.B1_COD
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+
+        params_with_pagination = params + [offset, page_size]
+        rows = self.execute_query(data_query, tuple(params_with_pagination))
+
+        return {
+            "success": True,
+            "total": total_rows,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total_rows + page_size - 1) // page_size,
+            "filters": {
+                "code": code,
+                "description": description,
+                "group": group
+            },
+            "data": rows
+        }
+
+
 
     # -------------------------------
-    # 🔹 ESTRUTURA (BOM)
+    # 🔹 STRUCTURE (BOM)
     # -------------------------------
     def list_structure(self, code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
         if page < 1:
@@ -415,7 +488,6 @@ class ProductRepository(BaseRepository):
             },
             "data": data
         }
-
 
     # -------------------------------
     # 🔹 STOCK (SB2010)
