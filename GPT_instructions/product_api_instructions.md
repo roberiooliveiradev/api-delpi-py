@@ -16,6 +16,7 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 | Método | Endpoint                                  | Descrição                                                  |
 | ------ | ----------------------------------------- | ---------------------------------------------------------- |
 | `GET`  | `/products/`                              | Lista produtos com limite definido                         |
+| `GET`  | `/products/search/description`            | Busca avançada por descrição com score                     |
 | `GET`  | `/products/search`                        | Pesquisa produto específico por código, descrição ou grupo |
 | `GET`  | `/products/{code}`                        | Consulta produto específico                                |
 | `GET`  | `/products/{code}/structure`              | Estrutura do produto (componentes) via CTE                 |
@@ -70,7 +71,109 @@ GET /products?limit=20
 
 ---
 
-### 🔹 2. Pesquisa de Produtos
+### 🔍 2. Nova Rota — Busca Avançada por Descrição
+
+#### **GET /products/search/description**
+
+Busca produtos pela descrição utilizando:
+
+-   frase completa
+-   termos separados
+-   ranking inteligente por relevância
+-   peso baseado na posição do termo
+-   similaridade normalizada por tamanho
+-   paginação
+
+---
+
+#### 📌 Parâmetros
+
+| Nome          | Tipo   | Obrigatório | Descrição                                   |
+| ------------- | ------ | ----------- | ------------------------------------------- |
+| `description` | string | ✔           | Texto da busca                              |
+| `page`        | int    | ✖           | Página (default: 1)                         |
+| `page_size`   | int    | ✖           | Registros por página (default: 50, max 500) |
+
+---
+
+#### 🧠 Ranking Inteligente (Score)
+
+O ranking é um ponto chave da rota. Ele utiliza os seguintes pesos:
+
+---
+
+##### 🟦 1. Frase completa
+
+```
++50 pontos
+```
+
+---
+
+##### 🟦 2. Localização da palavra (1 termo)
+
+| Regra                                   | Score |
+| --------------------------------------- | ----- |
+| início da descrição (`TERM %`)          | +30   |
+| início de palavra (`% TERM %`)          | +20   |
+| presente em qualquer posição (`%TERM%`) | +10   |
+
+---
+
+##### 🟩 3. Múltiplos termos
+
+| Regra                            | Score |
+| -------------------------------- | ----- |
+| termo no início                  | +25   |
+| termo iniciando palavra          | +15   |
+| termo presente em qualquer lugar | +5    |
+
+---
+
+##### 🟧 4. Similaridade normalizada de tamanho
+
+Pontuação entre **0 e 10**, calculada por:
+
+-   distância entre o tamanho da descrição e o tamanho da busca
+-   normalização para evitar favorecer descrições muito longas
+-   CAST para `INT` para evitar erros de JSON (`Decimal`)
+
+---
+
+#### 🔎 Exemplo de requisição
+
+```http
+GET /products/search/description?description=TERM BANDEIRA&page=1&page_size=5
+```
+
+---
+
+#### 🔎 Exemplo de resposta
+
+```json
+{
+    "success": true,
+    "message": "Busca por descrição realizada com sucesso.",
+    "data": {
+        "page": 1,
+        "pageSize": 5,
+        "total": 56,
+        "totalPages": 12,
+        "description": "TERM BANDEIRA",
+        "results": [
+            {
+                "B1_COD": "10081501",
+                "B1_DESC": "TERM. BANDEIRA 6,3X0,8...",
+                "relevance_score": 47
+            }
+        ]
+    }
+}
+```
+
+---
+
+### 🔹 3. Pesquisa de Produtos
 
 A rota permite realizar uma busca inteligente em produtos do Protheus, utilizando:
 
@@ -180,7 +283,7 @@ GET /products/search?page=1&page_size=20&description=terminal
 
 ---
 
-### 🔹 3. Consultar produto específico
+### 🔹 4. Consultar produto específico
 
 ```http
 GET /products/10080522
@@ -204,7 +307,7 @@ GET /products/10080522
 
 ---
 
-### 🔹 4. Estrutura do produto (BOM)
+### 🔹 5. Estrutura do produto (BOM)
 
 ```http
 GET /products/10080522/structure?max_depth=10&page=1&page_size=50
@@ -238,7 +341,7 @@ GET /products/10080522/structure?max_depth=10&page=1&page_size=50
 
 ---
 
-### 🔹 5. Produtos pais (Where Used)
+### 🔹 6. Produtos pais (Where Used)
 
 ```http
 GET /products/20010001/parents?max_depth=5&page=1&page_size=50
@@ -270,7 +373,7 @@ GET /products/20010001/parents?max_depth=5&page=1&page_size=50
 
 ---
 
-### 🔹 6. Notas Fiscais de Entrada (Inbound)
+### 🔹 7. Notas Fiscais de Entrada (Inbound)
 
 ```http
 GET /products/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&supplier=000001&branch=01
@@ -322,7 +425,7 @@ GET /products/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=
 
 ---
 
-### 🔹 7. Notas Fiscais de Saída (Outbound)
+### 🔹 8. Notas Fiscais de Saída (Outbound)
 
 ```http
 GET /products/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&customer=000001&branch=01
@@ -374,7 +477,7 @@ GET /products/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start
 
 ---
 
-### 🔹 8. Estoque
+### 🔹 9. Estoque
 
 ```http
 GET /products/{code}/stock?page=1&page_size=50&branch=01&location=01
