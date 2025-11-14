@@ -362,7 +362,7 @@ class ProductRepository(BaseRepository):
         page_size: int = 50,
         code: Optional[str] = None,
         description: Optional[str] = None,
-        group: Optional[str] = None
+        # group: Optional[str] = None
     ) -> dict:
 
         if page < 1:
@@ -405,9 +405,9 @@ class ProductRepository(BaseRepository):
 
             where_clauses.append("(" + " OR ".join(desc_conditions) + ")")
 
-        if group:
-            where_clauses.append("SB1.B1_GRUPO = ?")
-            where_params.append(group)
+        # if group:
+        #     where_clauses.append("SB1.B1_GRUPO = ?")
+        #     where_params.append(group)
 
         where_sql = " AND ".join(where_clauses)
 
@@ -497,7 +497,7 @@ class ProductRepository(BaseRepository):
             "filters": {
                 "code": code,
                 "description": description,
-                "group": group
+                # "group": group
             },
             "params": final_params,
             "data": rows

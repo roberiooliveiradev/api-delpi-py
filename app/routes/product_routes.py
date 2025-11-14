@@ -49,10 +49,15 @@ def search_products_by_params_route(
     page_size: int = Query(50, ge=1, le=500),
     code: Optional[str] = Query(None, description="Pesquisar por código (LIKE)"),
     description: Optional[str] = Query(None, description="Pesquisar por descrição (LIKE)"),
-    group: Optional[str] = Query(None, description="Código do grupo B1_GRUPO")
+    # group: Optional[str] = Query(None, description="Código do grupo B1_GRUPO")
 ):
     try:
-        result = search_products_by_params(page, page_size, code, description, group)
+        result = search_products_by_params(page, 
+                                           page_size, 
+                                           code, 
+                                           description, 
+                                        #    group
+                                           )
         return success_response(
             data=result,
             message=f"Pesquisa de produtos realizada com sucesso (página {page}/{result['totalPages']})."
