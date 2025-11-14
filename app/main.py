@@ -6,8 +6,8 @@ from app.config import settings  # Configurações do .env
 from app.routes import product_routes   # Rotas de produtos
 from app.routes import system_routes   # Rotas de produtos
 from app.routes import data_routes  # Rota genérica
-# SERVER_URL = " http://127.0.0.1:3000/"
-SERVER_URL = " https://0face43d5ce4.ngrok-free.app"
+SERVER_URL = " http://127.0.0.1:8000/"
+# SERVER_URL = "https://f26b6da40696.ngrok-free.app"
 # Instância principal do app FastAPI
 app = FastAPI(
     title="API TOTVS Protheus",

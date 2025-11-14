@@ -13,13 +13,16 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 
 ## ⚙️ Endpoints
 
-| Método | Endpoint                    | Descrição                                   |
-| ------ | --------------------------- | ------------------------------------------- |
-| `GET`  | `/product/`                 | Lista produtos com limite definido          |
-| `GET`  | `/product/{code}`           | Consulta produto específico                 |
-| `GET`  | `/product/{code}/structure` | Estrutura do produto (componentes) via CTE  |
-| `GET`  | `/product/{code}/parents`   | Produtos que utilizam o item (pais) via CTE |
-| `GET`  | `/product/{code}/suppliers` | Lista fornecedores de um produto            |
+| Método | Endpoint                                 | Descrição                                   |
+| ------ | ---------------------------------------- | ------------------------------------------- |
+| `GET`  | `/product/`                              | Lista produtos com limite definido          |
+| `GET`  | `/product/{code}`                        | Consulta produto específico                 |
+| `GET`  | `/product/{code}/structure`              | Estrutura do produto (componentes) via CTE  |
+| `GET`  | `/product/{code}/parents`                | Produtos que utilizam o item (pais) via CTE |
+| `GET`  | `/product/{code}/suppliers`              | Lista fornecedores de um produto            |
+| `GET`  | `/product/{code}/inbound-invoice-items`  | Notas fiscais de entrada do item            |
+| `GET`  | `/product/{code}/outbound-invoice-items` | Notas fiscais de saída do item              |
+| `GET`  | `/product/{code}/stock`                  | Consulta estoque com filtros e paginação    |
 
 ---
 
@@ -32,6 +35,8 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 | `max_depth` | int  | 10     | Profundidade máxima da recursão               |
 | `page`      | int  | 1      | Página atual                                  |
 | `page_size` | int  | 100    | Registros por página (máx: 500)               |
+| `branch`    | str  | None   | Filial para filtro                            |
+| `location`  | str  | None   | Local de estoque                              |
 
 ---
 
@@ -148,6 +153,157 @@ GET /product/20010001/parents?max_depth=5&page=1&page_size=50
                 }
             ]
         }
+    }
+}
+```
+
+---
+
+### 🔹 5. Notas Fiscais de Entrada (Inbound)
+
+```http
+GET /product/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&supplier=000001&branch=01
+```
+
+| Parâmetro          | Tipo | Obrigatório | Descrição                                    |
+| ------------------ | ---- | ----------- | -------------------------------------------- |
+| `code`             | str  | ✔           | Código do produto (`D1_COD`)                 |
+| `page`             | int  | ✖           | Página (default: 1)                          |
+| `page_size`        | int  | ✖           | Registros por página (default: 50, máx: 500) |
+| `issue_date_start` | str  | ✖           | Data inicial de emissão (`YYYY-MM-DD`)       |
+| `issue_date_end`   | str  | ✖           | Data final de emissão (`YYYY-MM-DD`)         |
+| `supplier`         | str  | ✖           | Código do fornecedor (`D1_FORNECE`)          |
+| `branch`           | str  | ✖           | Filial (`D1_FILIAL`)                         |
+
+**Resposta:**
+
+```json
+{
+    "success": true,
+    "message": "Inbound invoices for 10080522 fetched successfully (page 1/2).",
+    "data": {
+        "total": 73,
+        "page": 1,
+        "pageSize": 50,
+        "totalPages": 2,
+        "filters": {
+            "issue_date_start": "20240101",
+            "issue_date_end": "20241231",
+            "supplier": "000001",
+            "branch": "01"
+        },
+        "data": [
+            {
+                "D1_FILIAL": "01",
+                "D1_DOC": "12345",
+                "D1_SERIE": "1",
+                "D1_FORNECE": "000001",
+                "supplier_name": "FORNECEDOR TESTE",
+                "D1_COD": "10080522",
+                "D1_QUANT": 150,
+                "D1_EMISSAO": "20240105",
+                "D1_LOCAL": "01"
+            }
+        ]
+    }
+}
+```
+
+---
+
+### 🔹 6. Notas Fiscais de Saída (Outbound)
+
+```http
+GET /product/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&customer=000001&branch=01
+```
+
+| Parâmetro          | Tipo | Obrigatório | Descrição                                    |
+| ------------------ | ---- | ----------- | -------------------------------------------- |
+| `code`             | str  | ✔           | Código do produto (`D2_COD`)                 |
+| `page`             | int  | ✖           | Página (default: 1)                          |
+| `page_size`        | int  | ✖           | Registros por página (default: 50, máx: 500) |
+| `issue_date_start` | str  | ✖           | Data inicial de emissão (`YYYY-MM-DD`)       |
+| `issue_date_end`   | str  | ✖           | Data final de emissão (`YYYY-MM-DD`)         |
+| `customer`         | str  | ✖           | Código do cliente (`D2_CLIENTE`)             |
+| `branch`           | str  | ✖           | Filial (`D2_FILIAL`)                         |
+
+**Resposta:**
+
+```json
+{
+    "success": true,
+    "message": "Outbound invoices for 10080522 fetched successfully (page 1/3).",
+    "data": {
+        "total": 120,
+        "page": 1,
+        "pageSize": 50,
+        "totalPages": 3,
+        "filters": {
+            "issue_date_start": "20240101",
+            "issue_date_end": "20241231",
+            "customer": "000001",
+            "branch": "01"
+        },
+        "data": [
+            {
+                "D2_FILIAL": "01",
+                "D2_DOC": "98765",
+                "D2_SERIE": "1",
+                "D2_CLIENTE": "000001",
+                "customer_name": "CLIENTE TESTE",
+                "D2_COD": "10080522",
+                "D2_QUANT": 75,
+                "D2_EMISSAO": "20240210",
+                "D2_LOCAL": "01"
+            }
+        ]
+    }
+}
+```
+
+---
+
+### 🔹 7. Estoque
+
+```http
+GET /product/{code}/stock?page=1&page_size=50&branch=01&location=01
+```
+
+| Parâmetro   | Tipo | Obrigatório | Descrição                          |
+| ----------- | ---- | ----------- | ---------------------------------- |
+| `code`      | str  | ✔           | Código do produto (B2_COD)         |
+| `page`      | int  | ✖           | Página (default: 1)                |
+| `page_size` | int  | ✖           | Registros por página (default: 50) |
+| `branch`    | str  | ✖           | Filial (`B2_FILIAL`)               |
+| `location`  | str  | ✖           | Local (`B2_LOCAL`)                 |
+
+**Resposta:**
+
+```json
+{
+    "success": true,
+    "message": "Estoque de 10080522 retornado com sucesso (página 1/1).",
+    "data": {
+        "total": 2,
+        "page": 1,
+        "pageSize": 50,
+        "totalPages": 1,
+        "filters": {
+            "branch": "01",
+            "location": "01"
+        },
+        "data": [
+            {
+                "B2_FILIAL": "01",
+                "B2_LOCAL": "01",
+                "B2_COD": "10080522",
+                "B2_QATU": 1500,
+                "B2_QEMP": 0,
+                "B2_QPEDI": 0,
+                "B2_SEGUM": "UN",
+                "B2_QTREC": 0
+            }
+        ]
     }
 }
 ```

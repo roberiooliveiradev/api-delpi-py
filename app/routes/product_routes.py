@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
@@ -141,15 +141,25 @@ def outbound_invoice_items(
     except Exception as e:
         log_error(f"Erro ao consultar NF-es de saída para {code}: {e}")
         return error_response(f"Unexpected error: {e}")
-
-# @router.get("/debug/teste", summary="Isso mostra se o D4_OPERAC realmente coincide com H8_OPER.")
-# def teste():
-#     try:
-#         result = get_teste()
-#         return success_response(
-#             data=result,
-#             message="Busca realizada com sucesso."
-#         )
-#     except Exception as e:
-#         log_error(f"Erro ao consultar. {e}")
-#         return error_response(f"Erro inesperado: {e}")
+    
+@router.get("/{code}/stock", summary="Consulta o estoque de um produto com filtros e paginação")
+def stock(
+    code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    branch: Optional[str] = Query(None, description="Filial (B2_FILIAL)"),
+    location: Optional[str] = Query(None, description="Local (B2_LOCAL)")
+):
+    """
+    Retorna o estoque do produto consultando a tabela SB2010.
+    Possui filtros opcionais para filial e local, além de paginação.
+    """
+    try:
+        result = get_stock(code, page, page_size, branch, location)
+        return success_response(
+            data=result,
+            message=f"Estoque de {code} retornado com sucesso (página {page}/{result['totalPages']})."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar estoque do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")

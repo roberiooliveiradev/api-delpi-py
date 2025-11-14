@@ -12,7 +12,7 @@ class Settings:
     DB_PORT: str = os.getenv("DB_PORT", "1433")
 
     # API Server
-    PORT: str = os.getenv("PORT", "3000")
+    PORT: str = os.getenv("PORT", "8000")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "secret")
 
     # Configurações de execução do agente GPT

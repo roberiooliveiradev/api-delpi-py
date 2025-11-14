@@ -111,3 +111,19 @@ def get_outbound_invoice_items(
     except Exception as e:
         log_error(f"Erro ao listar NF-es de saída para {code}: {e}")
         raise DatabaseConnectionError(str(e))
+
+def get_stock(
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    branch: Optional[str] = None,
+    location: Optional[str] = None
+) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando estoque para {code} (página {page})")
+
+    try:
+        return repo.list_stock(code, page, page_size, branch, location)
+    except Exception as e:
+        log_error(f"Erro ao listar estoque para {code}: {e}")
+        raise DatabaseConnectionError(str(e))
