@@ -13,30 +13,31 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 
 ## ⚙️ Endpoints
 
-| Método | Endpoint                                 | Descrição                                   |
-| ------ | ---------------------------------------- | ------------------------------------------- |
-| `GET`  | `/product/`                              | Lista produtos com limite definido          |
-| `GET`  | `/product/{code}`                        | Consulta produto específico                 |
-| `GET`  | `/product/{code}/structure`              | Estrutura do produto (componentes) via CTE  |
-| `GET`  | `/product/{code}/parents`                | Produtos que utilizam o item (pais) via CTE |
-| `GET`  | `/product/{code}/suppliers`              | Lista fornecedores de um produto            |
-| `GET`  | `/product/{code}/inbound-invoice-items`  | Notas fiscais de entrada do item            |
-| `GET`  | `/product/{code}/outbound-invoice-items` | Notas fiscais de saída do item              |
-| `GET`  | `/product/{code}/stock`                  | Consulta estoque com filtros e paginação    |
+| Método | Endpoint                                  | Descrição                                                  |
+| ------ | ----------------------------------------- | ---------------------------------------------------------- |
+| `GET`  | `/products/`                              | Lista produtos com limite definido                         |
+| `GET`  | `/products/search`                        | Pesquisa produto específico por código, descrição ou grupo |
+| `GET`  | `/products/{code}`                        | Consulta produto específico                                |
+| `GET`  | `/products/{code}/structure`              | Estrutura do produto (componentes) via CTE                 |
+| `GET`  | `/products/{code}/parents`                | Produtos que utilizam o item (pais) via CTE                |
+| `GET`  | `/products/{code}/suppliers`              | Lista fornecedores de um produto                           |
+| `GET`  | `/products/{code}/inbound-invoice-items`  | Notas fiscais de entrada do item                           |
+| `GET`  | `/products/{code}/outbound-invoice-items` | Notas fiscais de saída do item                             |
+| `GET`  | `/products/{code}/stock`                  | Consulta estoque com filtros e paginação                   |
 
 ---
 
 ## 🔍 Parâmetros
 
-| Parâmetro   | Tipo | Padrão | Descrição                                     |
-| ----------- | ---- | ------ | --------------------------------------------- |
-| `limit`     | int  | 50     | Limite de registros retornados em `/product/` |
-| `code`      | str  | —      | Código do produto (`B1_COD`)                  |
-| `max_depth` | int  | 10     | Profundidade máxima da recursão               |
-| `page`      | int  | 1      | Página atual                                  |
-| `page_size` | int  | 100    | Registros por página (máx: 500)               |
-| `branch`    | str  | None   | Filial para filtro                            |
-| `location`  | str  | None   | Local de estoque                              |
+| Parâmetro   | Tipo | Padrão | Descrição                                      |
+| ----------- | ---- | ------ | ---------------------------------------------- |
+| `limit`     | int  | 50     | Limite de registros retornados em `/products/` |
+| `code`      | str  | —      | Código do produto (`B1_COD`)                   |
+| `max_depth` | int  | 10     | Profundidade máxima da recursão                |
+| `page`      | int  | 1      | Página atual                                   |
+| `page_size` | int  | 100    | Registros por página (máx: 500)                |
+| `branch`    | str  | None   | Filial para filtro                             |
+| `location`  | str  | None   | Local de estoque                               |
 
 ---
 
@@ -45,7 +46,7 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 ### 🔹 1. Listar produtos
 
 ```http
-GET /product?limit=20
+GET /products?limit=20
 ```
 
 **Resposta:**
@@ -71,10 +72,59 @@ GET /product?limit=20
 
 ### 🔹 2. Pesquisa de Produtos
 
-> A rota permite pesquisar produtos por **código**, **descrição** e **grupo**, com paginação.
+A rota permite realizar uma busca inteligente em produtos do Protheus, utilizando:
+
+-   Código (B1_COD)
+
+-   Descrição completa (B1_DESC)
+
+-   Termos individuais da descrição
+
+-   Grupo (B1_GRUPO)
+
+-   Ordenação automática por relevância
+
+-   Paginação
+
+#### 🔎 Como a busca funciona
+
+Ao informar o parâmetro description, a API realiza:
+
+1.  Busca pela frase completa
+
+```sql
+B1_DESC LIKE '%terminal bandeira%'
+```
+
+2.  Busca pelos termos individuais
+
+Exemplo: "terminal bandeira" →
+
+```sql
+B1_DESC LIKE '%terminal%'
+OR B1_DESC LIKE '%bandeira%'
+```
+
+3. Ranking automático de relevância
+
+O resultado é ordenado por um score que considera:
+
+| Critério                             | Pontos      |
+| ------------------------------------ | ----------- |
+| Combina a frase completa             | **+50**     |
+| Cada termo encontrado                | **+10**     |
+| Similaridade do tamanho da descrição | **0 a +10** |
+
+4. Ordenação final
+
+```sql
+ORDER BY relevance_score DESC, B1_COD
+```
+
+#### 📘 Exemplo de requisição
 
 ```http
-GET /product/search?page=1&page_size=50&code=100&description=terminal&group=1008
+GET /products/search?page=1&page_size=50&code=100&description=TERM. BANDEIRA&group=1008
 ```
 
 | Parâmetro     | Tipo | Obrigatório | Descrição                                         |
@@ -88,7 +138,7 @@ GET /product/search?page=1&page_size=50&code=100&description=terminal&group=1008
 **Exemplo de requisição**
 
 ```http
-GET /product/search?page=1&page_size=20&description=terminal
+GET /products/search?page=1&page_size=20&description=terminal
 ```
 
 **Resposta:**
@@ -125,7 +175,7 @@ GET /product/search?page=1&page_size=20&description=terminal
 ### 🔹 3. Consultar produto específico
 
 ```http
-GET /product/10080522
+GET /products/10080522
 ```
 
 **Resposta:**
@@ -149,7 +199,7 @@ GET /product/10080522
 ### 🔹 4. Estrutura do produto (BOM)
 
 ```http
-GET /product/10080522/structure?max_depth=10&page=1&page_size=50
+GET /products/10080522/structure?max_depth=10&page=1&page_size=50
 ```
 
 **Resposta:**
@@ -183,7 +233,7 @@ GET /product/10080522/structure?max_depth=10&page=1&page_size=50
 ### 🔹 5. Produtos pais (Where Used)
 
 ```http
-GET /product/20010001/parents?max_depth=5&page=1&page_size=50
+GET /products/20010001/parents?max_depth=5&page=1&page_size=50
 ```
 
 **Resposta:**
@@ -215,7 +265,7 @@ GET /product/20010001/parents?max_depth=5&page=1&page_size=50
 ### 🔹 6. Notas Fiscais de Entrada (Inbound)
 
 ```http
-GET /product/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&supplier=000001&branch=01
+GET /products/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&supplier=000001&branch=01
 ```
 
 | Parâmetro          | Tipo | Obrigatório | Descrição                                    |
@@ -267,7 +317,7 @@ GET /product/{code}/inbound-invoice-items?page=1&page_size=50&issue_date_start=2
 ### 🔹 7. Notas Fiscais de Saída (Outbound)
 
 ```http
-GET /product/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&customer=000001&branch=01
+GET /products/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start=2024-01-01&issue_date_end=2024-12-31&customer=000001&branch=01
 ```
 
 | Parâmetro          | Tipo | Obrigatório | Descrição                                    |
@@ -319,7 +369,7 @@ GET /product/{code}/outbound-invoice-items?page=1&page_size=50&issue_date_start=
 ### 🔹 8. Estoque
 
 ```http
-GET /product/{code}/stock?page=1&page_size=50&branch=01&location=01
+GET /products/{code}/stock?page=1&page_size=50&branch=01&location=01
 ```
 
 | Parâmetro   | Tipo | Obrigatório | Descrição                          |
@@ -365,8 +415,8 @@ GET /product/{code}/stock?page=1&page_size=50&branch=01&location=01
 
 ## 🧠 Dicas para o agente GPT
 
--   Utilize `/product/{code}/structure` para entender a **árvore de montagem**.
--   Utilize `/product/{code}/parents` para rastrear **onde o item é usado**.
+-   Utilize `/products/{code}/structure` para entender a **árvore de montagem**.
+-   Utilize `/products/{code}/parents` para rastrear **onde o item é usado**.
 -   Sempre incluir paginação (`page`, `page_size`) para respostas grandes.
 -   Campos `max_depth` > 10 podem ser lentos; mantenha entre 5–10.
 -   Trate `data["components"]` recursivamente — cada nó contém subcomponentes.

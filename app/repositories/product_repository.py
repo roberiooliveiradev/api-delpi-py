@@ -52,43 +52,100 @@ class ProductRepository(BaseRepository):
 
         offset = (page - 1) * page_size
 
-        filters = ["SB1.D_E_L_E_T_ = ''"]
-        params = []
+        # ============================
+        # WHERE FILTERS
+        # ============================
+        where_clauses = ["SB1.D_E_L_E_T_ = ''"]
+        where_params: list[str] = []
 
+        # code
         if code:
-            filters.append("SB1.B1_COD LIKE ?")
-            params.append(f"%{code}%")
+            where_clauses.append("SB1.B1_COD LIKE ?")
+            where_params.append(f"%{code}%")
+
+        # description
+        terms: list[str] = []
+        desc_clean: Optional[str] = None
+        desc_length = 0
 
         if description:
-            filters.append("SB1.B1_DESC LIKE ?")
-            params.append(f"%{description}%")
+            desc_clean = description.strip()
+            desc_length = len(desc_clean)
+            terms = [t.strip() for t in desc_clean.split() if t.strip()]
 
+            desc_conditions: list[str] = []
+
+            # frase completa
+            desc_conditions.append("SB1.B1_DESC LIKE ?")
+            where_params.append(f"%{desc_clean}%")
+
+            # termos individuais
+            if terms:
+                t_clauses: list[str] = []
+                for t in terms:
+                    t_clauses.append("SB1.B1_DESC LIKE ?")
+                    where_params.append(f"%{t}%")
+                desc_conditions.append("(" + " OR ".join(t_clauses) + ")")
+
+            where_clauses.append("(" + " OR ".join(desc_conditions) + ")")
+
+        # group
         if group:
-            filters.append("SB1.B1_GRUPO = ?")
-            params.append(group)
+            where_clauses.append("SB1.B1_GRUPO = ?")
+            where_params.append(group)
 
-        where_clause = " AND ".join(filters)
+        where_sql = " AND ".join(where_clauses)
 
-        # Contagem total
-        count_query = f"""
+        # ============================
+        # COUNT
+        # ============================
+        count_sql = f"""
             SELECT COUNT(*) AS total
             FROM SB1010 AS SB1
-            WHERE {where_clause}
+            WHERE {where_sql}
         """
-        total_row = self.execute_one(count_query, tuple(params))
-        total_rows = int(total_row["total"] or 0)
+        total_rows = int(self.execute_one(count_sql, tuple(where_params))["total"] or 0)
 
-        # Dados paginados
-        data_query = f"""
-            SELECT SB1.*
+        # ============================
+        # SCORE (Ranking)
+        # ============================
+        score_parts: list[str] = []
+        score_params: list[str] = []
+
+        if description and desc_clean:
+            # 1) frase completa → usa parâmetro próprio (primeiro ? da query)
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+            score_params.append(f"%{desc_clean}%")
+
+            # 2) termos → inline (sem parâmetros extras)
+            for t in terms:
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 10 ELSE 0 END")
+
+            # 3) similaridade de tamanho → inline também
+            score_parts.append(f"(10 - ABS(LEN(SB1.B1_DESC) - {desc_length}))")
+
+        score_sql = " + ".join(score_parts) if score_parts else "0"
+
+        # ============================
+        # FINAL QUERY
+        # ============================
+        final_sql = f"""
+            SELECT 
+                SB1.*,
+                ({score_sql}) AS relevance_score
             FROM SB1010 AS SB1
-            WHERE {where_clause}
-            ORDER BY SB1.B1_COD
+            WHERE {where_sql}
+            ORDER BY relevance_score DESC, SB1.B1_COD ASC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        params_with_pagination = params + [offset, page_size]
-        rows = self.execute_query(data_query, tuple(params_with_pagination))
+        # ORDEM CORRETA DOS PARÂMETROS:
+        # 1) score_params  → primeiro ? está no SELECT (score)
+        # 2) where_params  → ? do WHERE
+        # 3) offset, page_size
+        final_params = score_params + where_params + [offset, page_size]
+
+        rows = self.execute_query(final_sql, tuple(final_params))
 
         return {
             "success": True,
@@ -101,6 +158,7 @@ class ProductRepository(BaseRepository):
                 "description": description,
                 "group": group
             },
+            "params": final_params,
             "data": rows
         }
 
