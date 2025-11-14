@@ -90,10 +90,18 @@ A rota permite realizar uma busca inteligente em produtos do Protheus, utilizand
 
 Ao informar o parâmetro description, a API realiza:
 
+**Exemplo de pedido:**
+
+-   "Liste 5 exemplos de terminais bandeira."
+
+```http
+GET /products/search?page=1&page_size=5&description=TERM. BANDEIRA
+```
+
 1.  Busca pela frase completa
 
 ```sql
-B1_DESC LIKE '%terminal bandeira%'
+B1_DESC LIKE '%TERM. BANDEIRA%'
 ```
 
 2.  Busca pelos termos individuais
@@ -101,8 +109,8 @@ B1_DESC LIKE '%terminal bandeira%'
 Exemplo: "terminal bandeira" →
 
 ```sql
-B1_DESC LIKE '%terminal%'
-OR B1_DESC LIKE '%bandeira%'
+B1_DESC LIKE '%TERM.%'
+OR B1_DESC LIKE '%BANDEIRA%'
 ```
 
 3. Ranking automático de relevância

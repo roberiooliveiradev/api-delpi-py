@@ -112,19 +112,22 @@ class ProductRepository(BaseRepository):
         score_parts: list[str] = []
         score_params: list[str] = []
 
-        if description and desc_clean:
-            # 1) frase completa → usa parâmetro próprio (primeiro ? da query)
+        # Habilitar score SOMENTE se houver 2 ou mais termos
+        enable_score = description and desc_clean and len(terms) > 1
+
+        if enable_score:
+            # 1) frase completa → primeiro parâmetro do score
             score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
             score_params.append(f"%{desc_clean}%")
 
-            # 2) termos → inline (sem parâmetros extras)
+            # 2) termos → inline (sem parâmetros)
             for t in terms:
                 score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 10 ELSE 0 END")
 
-            # 3) similaridade de tamanho → inline também
+            # 3) similaridade de tamanho
             score_parts.append(f"(10 - ABS(LEN(SB1.B1_DESC) - {desc_length}))")
 
-        score_sql = " + ".join(score_parts) if score_parts else "0"
+        score_sql = " + ".join(score_parts) if enable_score else "0"
 
         # ============================
         # FINAL QUERY
@@ -135,15 +138,19 @@ class ProductRepository(BaseRepository):
                 ({score_sql}) AS relevance_score
             FROM SB1010 AS SB1
             WHERE {where_sql}
-            ORDER BY relevance_score DESC, SB1.B1_COD ASC
+            ORDER BY 
+                relevance_score DESC,
+                SB1.B1_COD ASC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        # ORDEM CORRETA DOS PARÂMETROS:
-        # 1) score_params  → primeiro ? está no SELECT (score)
-        # 2) where_params  → ? do WHERE
-        # 3) offset, page_size
-        final_params = score_params + where_params + [offset, page_size]
+        # ORDEM CORRETA DOS PARÂMETROS
+        # Score somente se enable_score == True
+        if enable_score:
+            final_params = score_params + where_params + [offset, page_size]
+        else:
+            # SEM SCORE → Apenas where_params
+            final_params = where_params + [offset, page_size]
 
         rows = self.execute_query(final_sql, tuple(final_params))
 
