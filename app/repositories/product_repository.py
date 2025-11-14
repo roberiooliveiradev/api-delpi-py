@@ -360,7 +360,7 @@ class ProductRepository(BaseRepository):
         self,
         page: int = 1,
         page_size: int = 50,
-        code: Optional[str] = None,
+        # code: Optional[str] = None,
         description: Optional[str] = None,
         # group: Optional[str] = None
     ) -> dict:
@@ -378,9 +378,9 @@ class ProductRepository(BaseRepository):
         where_clauses = ["SB1.D_E_L_E_T_ = ''"]
         where_params: list[str] = []
 
-        if code:
-            where_clauses.append("SB1.B1_COD LIKE ?")
-            where_params.append(f"%{code}%")
+        # if code:
+        #     where_clauses.append("SB1.B1_COD LIKE ?")
+        #     where_params.append(f"%{code}%")
 
         terms: list[str] = []
         desc_clean: Optional[str] = None
@@ -495,7 +495,7 @@ class ProductRepository(BaseRepository):
             "pageSize": page_size,
             "totalPages": (total_rows + page_size - 1) // page_size,
             "filters": {
-                "code": code,
+                # "code": code,
                 "description": description,
                 # "group": group
             },

@@ -56,7 +56,7 @@ def search_products_by_description(
 def search_products_by_params(
     page: int = 1,
     page_size: int = 50,
-    code: Optional[str] = None,
+    # code: Optional[str] = None,
     description: Optional[str] = None,
     # group: Optional[str] = None
 ) -> dict:
@@ -66,7 +66,7 @@ def search_products_by_params(
         return repo.search_products(
             page, 
             page_size, 
-            code, 
+            # code, 
             description, 
             # group
             )

@@ -54,7 +54,7 @@ def search_products_by_params_route(
     try:
         result = search_products_by_params(page, 
                                            page_size, 
-                                           code, 
+                                        #    code, 
                                            description, 
                                         #    group
                                            )
