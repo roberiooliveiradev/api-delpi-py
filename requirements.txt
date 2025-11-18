@@ -3,4 +3,4 @@ uvicorn[standard]
 python-dotenv
 pyodbc
 pyngrok
-jwt
+PyJWT
