@@ -6,6 +6,13 @@ from app.config import settings  # Configurações do .env
 from app.routes import product_routes   # Rotas de produtos
 from app.routes import system_routes   # Rotas de produtos
 from app.routes import data_routes  # Rota genérica
+from app.routes import sql_routes  # Rota genérica
+from app.middleware.auth_middleware import jwt_middleware
+from fastapi.middleware import Middleware
+from fastapi.openapi.utils import get_openapi
+
+
+
 SERVER_URL = " http://127.0.0.1:8000/"
 # SERVER_URL = "https://f26b6da40696.ngrok-free.app"
 # Instância principal do app FastAPI
@@ -20,7 +27,42 @@ app = FastAPI(
     servers=[ 
         {"url": SERVER_URL, "description": "Servidor público (ngrok / produção)"}
     ],
+    openapi_tags=[
+        {"name": "Auth", "description": "Autenticação via JWT"}
+    ],
+    openapi_schema=None,
 )
+
+# Adicionar definição global de Bearer Token ao Swagger
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
+    }
+
+    # Exigir Bearer globalmente por padrão
+    openapi_schema["security"] = [{"BearerAuth": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
+# Adicionar middleware de autenticação
+app.middleware("http")(jwt_middleware)
 
 # Adiciona compressão GZIP a todas as respostas
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # bytes
@@ -51,6 +93,7 @@ def root():
 app.include_router(product_routes.router, prefix="/products", tags=["products"])
 app.include_router(system_routes.router, prefix="/system", tags=["system"])
 app.include_router(data_routes.router, prefix="/data", tags=["data"])
+app.include_router(sql_routes.router, prefix="/sql", tags=["sql"])
 # Execução direta (modo desenvolvimento)
 if __name__ == "__main__":
     import uvicorn
