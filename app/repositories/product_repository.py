@@ -96,13 +96,16 @@ class ProductRepository(BaseRepository):
             score_params.append(f"%{desc_clean}%")
 
             # 2. Termo começa exatamente a descrição
-            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '{term} %' THEN 30 ELSE 0 END")
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 30 ELSE 0 END")
+            score_params.append(f"{term} %")
 
             # 3. Termo inicia uma palavra (meio da descrição)
-            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '% {term} %' THEN 20 ELSE 0 END")
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 20 ELSE 0 END")
+            score_params.append(f"% {term} %")
 
             # 4. Termo presente em qualquer lugar
-            score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{term}%' THEN 10 ELSE 0 END")
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 10 ELSE 0 END")
+            score_params.append(f"%{term}%")
 
             # 5. Similaridade normalizada por tamanho (cast p/ evitar decimal)
             score_parts.append(
@@ -135,14 +138,14 @@ class ProductRepository(BaseRepository):
 
             for t in terms:
 
-                # termo no início da descrição
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '{t} %' THEN 25 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 25 ELSE 0 END")
+                score_params.append(f"{t} %")
 
-                # termo iniciando uma palavra mais à frente
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '% {t} %' THEN 15 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 15 ELSE 0 END")
+                score_params.append(f"% {t} %")
 
-                # termo presente em qualquer lugar
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 5 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 5 ELSE 0 END")
+                score_params.append(f"%{t}%")
 
             # Similaridade normalizada da frase inteira
             score_parts.append(
@@ -287,13 +290,16 @@ class ProductRepository(BaseRepository):
             for t in terms:
 
                 # termo no início da descrição
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '{t} %' THEN 25 ELSE 0 END")
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE ? THEN 25 ELSE 0 END")
+                score_params.append(f"{t} %")
 
                 # termo iniciando uma palavra mais à frente
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '% {t} %' THEN 15 ELSE 0 END")
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE ? THEN 15 ELSE 0 END")
+                score_params.append(f"% {t} %")
 
                 # termo presente em qualquer lugar
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE '%{t}%' THEN 5 ELSE 0 END")
+                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE ? THEN 5 ELSE 0 END")
+                score_params.append(f"%{t}%")
 
             # Similaridade normalizada da frase inteira
             score_parts.append(
