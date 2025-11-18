@@ -5,6 +5,11 @@ from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
 
+from pydantic import BaseModel
+import jwt
+from datetime import datetime, timedelta
+from app.config import settings
+
 router = APIRouter()
 
 @router.get("/tables", summary="Listagem de tabelas com paginação")
@@ -37,3 +42,32 @@ def table(tableName: str):
     except Exception as e:
         log_error(f"Erro ao consultar colunas da tabela {tableName}: {e}")
         return error_response(f"Erro inesperado: {e}")
+    
+# Modelo de entrada
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+# Usuário fixo para testes (você depois pode trocar para banco)
+VALID_USER = settings.DB_USER
+VALID_PASS = settings.DB_PASSWORD
+
+@router.post("/login")
+def login(data: LoginRequest):
+    if data.username != VALID_USER or data.password != VALID_PASS:
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+
+    payload = {
+        "sub": data.username,
+        "exp": datetime.utcnow() + timedelta(hours=8760),
+        "iat": datetime.utcnow()
+    }
+
+    token = jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+
+    return {
+        "success": True,
+        "message": "Login efetuado com sucesso.",
+        "token": token
+    }

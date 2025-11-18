@@ -38,12 +38,13 @@ async def jwt_middleware(request: Request, call_next):
     except jwt.ExpiredSignatureError:
         return JSONResponse(
             status_code=401,
-            content={"success": False, "message": "Token expirado."}
+            content={"success": False, "message": "Token expirado. Gere um novo em docs/system/login."}
         )
-    except Exception:
+    except jwt.InvalidTokenError:
         return JSONResponse(
             status_code=401,
             content={"success": False, "message": "Token inválido."}
         )
+
 
     return await call_next(request)
