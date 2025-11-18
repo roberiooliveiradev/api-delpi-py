@@ -12,10 +12,8 @@ PUBLIC_PATHS = {
 }
 
 def is_public_path(path: str) -> bool:
-    for public in PUBLIC_PATHS:
-        if path.startswith(public):
-            return True
-    return False
+    return path in PUBLIC_PATHS
+
 
 async def jwt_middleware(request: Request, call_next):
     path = request.url.path
