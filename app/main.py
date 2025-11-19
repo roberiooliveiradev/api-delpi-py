@@ -11,10 +11,8 @@ from app.middleware.auth_middleware import jwt_middleware
 from fastapi.middleware import Middleware
 from fastapi.openapi.utils import get_openapi
 
-
-
 SERVER_URL = " http://127.0.0.1:8000/"
-# SERVER_URL = "https://f26b6da40696.ngrok-free.app"
+
 # Instância principal do app FastAPI
 app = FastAPI(
     title="API TOTVS Protheus",
@@ -25,7 +23,7 @@ app = FastAPI(
         "email": "suporte@delpi.com.br",
     },
     servers=[ 
-        {"url": SERVER_URL, "description": "Servidor público (ngrok / produção)"}
+        {"url": SERVER_URL, "description": "Servidor público produção"}
     ],
     openapi_tags=[
         {"name": "Auth", "description": "Autenticação via JWT"}
@@ -42,8 +40,10 @@ def custom_openapi():
         title=app.title,
         version=app.version,
         description=app.description,
-        routes=app.routes,
+        routes=app.routes, 
+        servers=app.servers,
     )
+
 
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {
