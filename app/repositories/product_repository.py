@@ -817,70 +817,17 @@ class ProductRepository(BaseRepository):
         page: int = 1,
         page_size: int = 50,
         branch: Optional[str] = None,
-        include_components: bool = False,
         max_depth: int = 10
     ) -> dict:
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
-
-        if include_components and not 1 <= max_depth <= 50:
-            raise ValueError("max_depth must be between 1 and 50 when include_components=True")
-
+        
         offset = (page - 1) * page_size
 
         # =====================================================
-        # 🔹 MODO PADRÃO: apenas o produto informado
-        # =====================================================
-        if not include_components:
-            log_info(f"Listando roteiro de {code}, página {page}, tamanho {page_size}")
-            filters = ["SG2.D_E_L_E_T_ = ''", "SG2.G2_PRODUTO = ?"]
-            params: list = [code]
-
-            if branch:
-                filters.append("SG2.G2_FILIAL = ?")
-                params.append(branch)
-
-            where_clause = " AND ".join(filters)
-
-            # Contagem total
-            count_query = f"""
-                SELECT COUNT(*) AS total
-                FROM SG2010 AS SG2
-                WHERE {where_clause}
-            """
-            total_row = self.execute_one(count_query, tuple(params))
-            total_rows = int(total_row["total"] or 0)
-
-            # Dados paginados
-            data_query = f"""
-                SELECT 
-                    *
-                FROM SG2010 AS SG2
-                WHERE {where_clause}
-                ORDER BY SG2.G2_FILIAL, SG2.G2_PRODUTO, SG2.G2_OPERAC
-                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
-            """
-            params.extend([offset, page_size])
-            rows = self.execute_query(data_query, tuple(params))
-
-            return {
-                "success": True,
-                "total": total_rows,
-                "page": page,
-                "pageSize": page_size,
-                "totalPages": (total_rows + page_size - 1) // page_size,
-                "filters": {
-                    "branch": branch,
-                    "include_components": False,
-                    "max_depth": None
-                },
-                "data": rows
-            }
-
-        # =====================================================
-        # 🔹 MODO ESTENDIDO: produto + componentes (SG1010)
+        # 🔹 COMPONENTES: produto + componentes (SG1010)
         # =====================================================
         log_info(
             f"Listando roteiro de {code} e componentes (depth={max_depth}), "

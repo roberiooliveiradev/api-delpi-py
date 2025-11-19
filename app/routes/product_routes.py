@@ -218,7 +218,6 @@ def guide(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     branch: Optional[str] = Query(None, description="Filial (G2_FILIAL)"),
-    include_components: Optional[bool] = Query(None),
     max_depth: int = Query(10, ge=1, le=15)
 ):
     """
@@ -226,7 +225,7 @@ def guide(
     Possui filtros opcionais para filial e local, além de paginação.
     """
     try:
-        result = get_guide(code, page, page_size, branch, include_components, max_depth)
+        result = get_guide(code, page, page_size, branch, max_depth)
         return success_response(
             data=result,
             message=f"Roteiro de {code} retornado com sucesso (página {page}/{result['totalPages']})."

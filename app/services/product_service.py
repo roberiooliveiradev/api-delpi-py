@@ -152,14 +152,13 @@ def get_guide(
     page: int = 1,
     page_size: int = 50,
     branch: Optional[str] = None,
-    include_components: bool = False,
     max_depth: int = 10
 ) -> dict:
     repo = ProductRepository()
     log_info(f"Buscando estoque para {code} (página {page})")
 
     try:
-        return repo.list_guide(code, page, page_size, branch, include_components, max_depth)
+        return repo.list_guide(code, page, page_size, branch, max_depth)
     except Exception as e:
         log_error(f"Erro ao listar estoque para {code}: {e}")
         raise DatabaseConnectionError(str(e))
