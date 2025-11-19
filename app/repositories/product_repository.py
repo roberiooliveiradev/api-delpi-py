@@ -913,13 +913,23 @@ class ProductRepository(BaseRepository):
                 WHERE c.D_E_L_E_T_ = '' AND p.level < ?
             ),
             CODES AS (
-                SELECT ? AS productCode, 0 AS level
-                UNION
-                SELECT DISTINCT componentCode AS productCode, level
+                SELECT 
+                    ? AS productCode,
+                    NULL AS parentCode,
+                    0 AS level
+
+                UNION ALL
+
+                SELECT 
+                    DISTINCT componentCode AS productCode,
+                    parentCode,
+                    level
                 FROM RECURSIVE_BOM
             )
+
             SELECT 
                 SG2.*,
+                CODES.parentCode,
                 CODES.level AS bomLevel
             FROM SG2010 AS SG2
             INNER JOIN CODES
@@ -942,7 +952,6 @@ class ProductRepository(BaseRepository):
             "totalPages": (total_rows + page_size - 1) // page_size,
             "filters": {
                 "branch": branch,
-                "include_components": True,
                 "max_depth": max_depth
             },
             "data": rows
