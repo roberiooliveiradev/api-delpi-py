@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide
 from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
@@ -212,3 +212,23 @@ def stock(
         log_error(f"Erro ao consultar estoque do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
+@router.get("/{code}/guide", summary="Consulta o roteiro de um produto com filtros e paginação")
+def guide(
+    code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    branch: Optional[str] = Query(None, description="Filial (G2_FILIAL)")
+):
+    """
+    Retorna o roteiro do produto consultando a tabela SG2010.
+    Possui filtros opcionais para filial e local, além de paginação.
+    """
+    try:
+        result = get_guide(code, page, page_size, branch)
+        return success_response(
+            data=result,
+            message=f"Roteiro de {code} retornado com sucesso (página {page}/{result['totalPages']})."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar roteiro do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")

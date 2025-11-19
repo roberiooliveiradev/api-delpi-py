@@ -808,6 +808,66 @@ class ProductRepository(BaseRepository):
             "data": rows
         }
 
+    # -------------------------------
+    # 🔹 GUIDE (SG2010)
+    # -------------------------------
+    def list_guide(
+        self,
+        code: str,
+        page: int = 1,
+        page_size: int = 50,
+        branch: Optional[str] = None
+    ) -> dict:
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
+
+        offset = (page - 1) * page_size
+        filters = ["SG2.D_E_L_E_T_ = ''", "SG2.G2_PRODUTO = ?"]
+        params = [code]
+
+        if branch:
+            filters.append("SG2.G2_FILIAL = ?")
+            params.append(branch)
+
+        where_clause = " AND ".join(filters)
+
+        # Contagem total
+        count_query = f"""
+            SELECT COUNT(*) AS total
+            FROM SG2010 AS SG2
+            WHERE {where_clause}
+        """
+        total_row = self.execute_one(count_query, tuple(params))
+        total_rows = int(total_row["total"] or 0)
+
+        # Dados paginados
+        data_query = f"""
+            SELECT 
+                *
+            FROM SG2010 AS SG2
+            WHERE {where_clause}
+            ORDER BY SG2.G2_FILIAL
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+        
+        params.extend([offset, page_size])
+        rows = self.execute_query(data_query, tuple(params))
+
+        return {
+            "success": True,
+            "total": total_rows,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total_rows + page_size - 1) // page_size,
+            "filters": {
+                "branch": branch
+            },
+            "data": rows
+        }
+
+
     def _convert_date_to_protheus(date_str: Optional[str]) -> Optional[str]:
         """
         Converte 'YYYY-MM-DD' → 'YYYYMMDD' (padrão Protheus).

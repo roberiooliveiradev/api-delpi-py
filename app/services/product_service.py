@@ -146,3 +146,18 @@ def get_stock(
     except Exception as e:
         log_error(f"Erro ao listar estoque para {code}: {e}")
         raise DatabaseConnectionError(str(e))
+
+def get_guide(
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    branch: Optional[str] = None
+) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando estoque para {code} (página {page})")
+
+    try:
+        return repo.list_guide(code, page, page_size, branch)
+    except Exception as e:
+        log_error(f"Erro ao listar estoque para {code}: {e}")
+        raise DatabaseConnectionError(str(e))
