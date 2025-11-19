@@ -162,3 +162,21 @@ def get_guide(
     except Exception as e:
         log_error(f"Erro ao listar estoque para {code}: {e}")
         raise DatabaseConnectionError(str(e))
+
+
+def get_inspection(
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    branch: Optional[str] = None,
+    max_depth: int = 10
+) -> dict:
+
+    repo = ProductRepository()
+    log_info(f"Buscando inspeções de processo para {code} (página {page})")
+
+    try:
+        return repo.list_inspection(code, page, page_size, branch, max_depth)
+    except Exception as e:
+        log_error(f"Erro ao listar inspeções para {code}: {e}")
+        raise DatabaseConnectionError(str(e))

@@ -957,6 +957,204 @@ class ProductRepository(BaseRepository):
             "data": rows
         }
 
+    # -------------------------------
+    # 🔹 INSPECTION (QP6/QP7/QP8) — COMPLETO E FINAL
+    # -------------------------------
+    def list_inspection(
+    self,
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    branch: Optional[str] = None,
+    max_depth: int = 10
+    ) -> dict:
+
+        offset = (page - 1) * page_size
+
+        # ------------------------------
+        # 1) CTE para obter produto + componentes
+        # ------------------------------
+        cte = """
+            WITH RECURSIVE_BOM AS (
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS componentCode,
+                    1 AS level
+                FROM SG1010 WITH (NOLOCK)
+                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+
+                UNION ALL
+
+                SELECT 
+                    c.G1_COD,
+                    c.G1_COMP,
+                    p.level + 1
+                FROM SG1010 c WITH (NOLOCK)
+                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
+                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
+            ),
+
+            CODES AS (
+                SELECT 
+                    ? AS productCode,
+                    NULL AS parentCode,
+                    0 AS level
+
+                UNION ALL
+
+                SELECT DISTINCT 
+                    componentCode AS productCode,
+                    parentCode,
+                    level
+                FROM RECURSIVE_BOM
+            )
+
+        """
+
+        # ------------------------------
+        # 2) COUNT (somente QP6)
+        # ------------------------------
+        count_sql = f"""
+            {cte}
+            SELECT COUNT(*) AS total
+            FROM QP6010 QP6 WITH (NOLOCK)
+            INNER JOIN CODES ON CODES.productCode = QP6.QP6_PRODUT
+            WHERE QP6.D_E_L_E_T_ = ''
+        """
+
+        total = int(self.execute_one(count_sql, (code, max_depth, code))["total"])
+
+        # ------------------------------
+        # 3) Buscar QP6 (paginado)
+        # ------------------------------
+        qp6_sql = f"""
+            {cte}
+            SELECT 
+                QP6.QP6_PRODUT,
+                QP6.QP6_REVI,
+                QP6.QP6_REVINV,
+                QP6.QP6_DESCPO,
+                QP6.QP6_DTCAD,
+                QP6.QP6_DTINI,
+                QP6.QP6_CADR,
+                QP6.QP6_PTOLER,
+                QP6.QP6_TIPO,
+                QP6.QP6_DOCOBR,
+                QP6.QP6_SITPRD,
+                QP6.QP6_DESSTP,
+                QP6.QP6_DESSTP,
+                QP6.QP6_TMPLIM,
+                QP6.QP6_SHLF,
+                QP6.QP6_UNMED1,
+                QP6.QP6_UNAMO1,
+                QP6.QP6_SKPLOT,
+                QP6.QP6_DESCLT,
+                QP6.QP6_CODREC,
+                QP6.QP6_SITREV,
+                CODES.level,
+                CODES.productCode,
+                CODES.parentCode
+            FROM QP6010 QP6 WITH (NOLOCK)
+            INNER JOIN CODES ON CODES.productCode = QP6.QP6_PRODUT
+            WHERE QP6.D_E_L_E_T_ = ''
+            ORDER BY CODES.level, QP6.QP6_PRODUT
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+
+        qp6_rows = self.execute_query(qp6_sql, (code, max_depth, code, offset, page_size))
+
+        # ------------------------------
+        # 4) Buscar QP7 (para todos os produtos retornados)
+        # ------------------------------
+        product_list = [row["QP6_PRODUT"] for row in qp6_rows]
+
+        qp7_sql = f"""
+            SELECT 
+                QP7_FILIAL,
+                QP7_PRODUT,
+                QP7_REVI,
+                QP7_ENSAIO,
+                QP7_LABOR,
+                QP7_SEQLAB,
+                QP7_FORMUL,
+                QP7_UNIMED,
+                QP7_MINMAX,
+                QP7_NOMINA,
+                QP7_LIE,
+                QP7_LSE,
+                QP7_LIC,
+                QP7_LSC,
+                QP7_CODREC,
+                QP7_OPERAC
+
+            FROM QP7010 WITH (NOLOCK)
+            WHERE D_E_L_E_T_ = ''
+            AND QP7_PRODUT IN ({','.join(['?'] * len(product_list))})
+        """
+        qp7_rows = self.execute_query(qp7_sql, tuple(product_list))
+
+        # ------------------------------
+        # 5) Buscar QP8
+        # ------------------------------
+        qp8_sql = f"""
+            SELECT 
+                QP8_PRODUT,
+                QP8_REVI,
+                QP8_ENSAIO,
+                QP8_LABOR,
+                QP8_SEQLAB,
+                QP8_TEXTO,
+                QP8_CODREC,
+                QP8_OPERAC,
+                QP8_ENSOBR,
+                QP8_CERTIF
+            FROM QP8010 WITH (NOLOCK)
+            WHERE D_E_L_E_T_ = ''
+            AND QP8_PRODUT IN ({','.join(['?'] * len(product_list))})
+        """
+        qp8_rows = self.execute_query(qp8_sql, tuple(product_list))
+
+        # ------------------------------
+        # 6) Agrupar QP7 e QP8 por produto
+        # ------------------------------
+        ensaios_qp7 = {}
+        ensaios_qp8 = {}
+
+        for item in qp7_rows:
+            prod = item["QP7_PRODUT"]
+            ensaios_qp7.setdefault(prod, []).append(item)
+
+        for item in qp8_rows:
+            prod = item["QP8_PRODUT"]
+            ensaios_qp8.setdefault(prod, []).append(item)
+
+        # ------------------------------
+        # 7) Montar resposta final
+        # ------------------------------
+        final = []
+        for row in qp6_rows:
+            prod = row["QP6_PRODUT"]
+
+            final.append({
+                "product": prod,
+                "parentCode": row["parentCode"],
+                "level": row["level"],
+                "qp6": row,
+                "ensaios_mensuraveis": ensaios_qp7.get(prod, []),
+                "ensaios_textuais": ensaios_qp8.get(prod, [])
+            })
+
+        return {
+            "success": True,
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total + page_size - 1) // page_size,
+            "data": final
+        }
+
+
+
     def _convert_date_to_protheus(date_str: Optional[str]) -> Optional[str]:
         """
         Converte 'YYYY-MM-DD' → 'YYYYMMDD' (padrão Protheus).

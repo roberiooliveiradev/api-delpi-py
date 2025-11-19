@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection
 from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
@@ -232,4 +232,29 @@ def guide(
         )
     except Exception as e:
         log_error(f"Erro ao consultar roteiro do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+    
+@router.get(
+    "/{code}/inspection",
+    summary="Consulta a inspeção de processos do produto e seus componentes"
+)
+def inspection(
+    code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    branch: Optional[str] = Query(None, description="Filial (QP6_FILIAL)"),
+    max_depth: int = Query(10, ge=1, le=15)
+):
+    """
+    Retorna a inspeção do produto consultando QP6, QP7 e QP8,
+    incluindo inspeções dos componentes (via SG1010).
+    """
+    try:
+        result = get_inspection(code, page, page_size, branch, max_depth)
+        return success_response(
+            data=result,
+            message=f"Inspeção de {code} retornada com sucesso (página {page}/{result['totalPages']})."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar inspeção do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
