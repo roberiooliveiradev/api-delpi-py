@@ -212,19 +212,21 @@ def stock(
         log_error(f"Erro ao consultar estoque do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
-@router.get("/{code}/guide", summary="Consulta o roteiro de um produto com filtros e paginação")
+@router.get("/{code}/guide", summary="Consulta o roteiro de um produto e seus componentes com filtros e paginação")
 def guide(
     code: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
-    branch: Optional[str] = Query(None, description="Filial (G2_FILIAL)")
+    branch: Optional[str] = Query(None, description="Filial (G2_FILIAL)"),
+    include_components: Optional[bool] = Query(None),
+    max_depth: int = Query(10, ge=1, le=15)
 ):
     """
     Retorna o roteiro do produto consultando a tabela SG2010.
     Possui filtros opcionais para filial e local, além de paginação.
     """
     try:
-        result = get_guide(code, page, page_size, branch)
+        result = get_guide(code, page, page_size, branch, include_components, max_depth)
         return success_response(
             data=result,
             message=f"Roteiro de {code} retornado com sucesso (página {page}/{result['totalPages']})."

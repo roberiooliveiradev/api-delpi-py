@@ -13,18 +13,19 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 
 ## ⚙️ Endpoints
 
-| Método | Endpoint                                  | Descrição                                                  |
-| ------ | ----------------------------------------- | ---------------------------------------------------------- |
-| `GET`  | `/products/`                              | Lista produtos com limite definido                         |
-| `GET`  | `/products/search/description`            | Busca avançada por descrição com score                     |
-| `GET`  | `/products/search`                        | Pesquisa produto específico por código, descrição ou grupo |
-| `GET`  | `/products/{code}`                        | Consulta produto específico                                |
-| `GET`  | `/products/{code}/structure`              | Estrutura do produto (componentes) via CTE                 |
-| `GET`  | `/products/{code}/parents`                | Produtos que utilizam o item (pais) via CTE                |
-| `GET`  | `/products/{code}/suppliers`              | Lista fornecedores de um produto                           |
-| `GET`  | `/products/{code}/inbound-invoice-items`  | Notas fiscais de entrada do item                           |
-| `GET`  | `/products/{code}/outbound-invoice-items` | Notas fiscais de saída do item                             |
-| `GET`  | `/products/{code}/stock`                  | Consulta estoque com filtros e paginação                   |
+| Método | Endpoint                                  | Descrição                                                     |
+| ------ | ----------------------------------------- | ------------------------------------------------------------- |
+| `GET`  | `/products/`                              | Lista produtos com limite definido                            |
+| `GET`  | `/products/search/description`            | Busca avançada por descrição com score                        |
+| `GET`  | `/products/search`                        | Pesquisa produto específico por código, descrição ou grupo    |
+| `GET`  | `/products/{code}`                        | Consulta produto específico                                   |
+| `GET`  | `/products/{code}/structure`              | Estrutura do produto (componentes) via CTE                    |
+| `GET`  | `/products/{code}/parents`                | Produtos que utilizam o item (pais) via CTE                   |
+| `GET`  | `/products/{code}/suppliers`              | Lista fornecedores de um produto                              |
+| `GET`  | `/products/{code}/inbound-invoice-items`  | Notas fiscais de entrada do item                              |
+| `GET`  | `/products/{code}/outbound-invoice-items` | Notas fiscais de saída do item                                |
+| `GET`  | `/products/{code}/stock`                  | Consulta estoque com filtros e paginação                      |
+| `GET`  | `/products/{code}/guide`                  | Roteiro de produção (SG2010) com opção de incluir componentes |
 
 ---
 
@@ -524,6 +525,92 @@ GET /products/{code}/stock?page=1&page_size=50&branch=01&location=01
 
 ---
 
+### 🔹 10. Roteiro de Produção (Guide)
+
+Consulta o roteiro de produção do item na tabela **SG2010**.  
+Pode retornar apenas o roteiro do produto principal ou incluir também o roteiro de todos os seus componentes, utilizando a árvore de estrutura (BOM — SG1010).
+
+```http
+GET /products/{code}/guide?page=1&page_size=50&branch=01&include_components=true&max_depth=10
+```
+
+| Parâmetro            | Tipo | Obrigatório | Descrição                                                              |
+| -------------------- | ---- | ----------- | ---------------------------------------------------------------------- |
+| `code`               | str  | ✔           | Código do produto (`G2_PRODUTO`)                                       |
+| `page`               | int  | ✖           | Página atual (default: 1)                                              |
+| `page_size`          | int  | ✖           | Registros por página (default: 50, máx: 500)                           |
+| `branch`             | str  | ✖           | Filial (`G2_FILIAL`)                                                   |
+| `include_components` | bool | ✖           | Se `true`, retorna o roteiro do produto **e de todos os componentes**  |
+| `max_depth`          | int  | ✖           | Profundidade da estrutura ao buscar componentes (default: 10, máx: 50) |
+
+#### 🧠 Comportamento da rota
+
+-   include_components = false → retorna apenas o roteiro do produto informado
+
+-   include_components = true →
+
+        -   monta a árvore da estrutura (CTE recursiva SG1010)
+
+        -   identifica componentes até max_depth
+
+        -   retorna todos os roteiros encontrados em SG2010
+
+        -   adiciona o campo bomLevel, indicando o nível dentro da árvore
+
+        -   ordenação automática por:
+
+            ```sql
+            bomLevel ASC,
+            G2_PRODUTO ASC,
+            G2_OPER ASC
+            ```
+
+**📘 Exemplo de requisição**
+
+```http
+GET /products/10080522/guide?include_components=true&page=1&page_size=20
+```
+
+**📘 Exemplo de resposta**
+
+```json
+{
+    "success": true,
+    "message": "Roteiro de produção retornado com sucesso (página 1/3).",
+    "data": {
+        "total": 54,
+        "page": 1,
+        "pageSize": 20,
+        "totalPages": 3,
+        "filters": {
+            "branch": "01",
+            "include_components": true,
+            "max_depth": 10
+        },
+        "data": [
+            {
+                "G2_FILIAL": "01",
+                "G2_PRODUTO": "10080522",
+                "G2_OPER": "010",
+                "G2_RECURSO": "PRENSA1",
+                "G2_TEMPO": 12.5,
+                "bomLevel": 0
+            },
+            {
+                "G2_FILIAL": "01",
+                "G2_PRODUTO": "20010001",
+                "G2_OPER": "020",
+                "G2_RECURSO": "MONT1",
+                "G2_TEMPO": 3.0,
+                "bomLevel": 1
+            }
+        ]
+    }
+}
+```
+
+---
+
 ## 🧠 Dicas para o agente GPT
 
 -   Utilize `/products/{code}/structure` para entender a **árvore de montagem**.
@@ -531,3 +618,7 @@ GET /products/{code}/stock?page=1&page_size=50&branch=01&location=01
 -   Sempre incluir paginação (`page`, `page_size`) para respostas grandes.
 -   Campos `max_depth` > 10 podem ser lentos; mantenha entre 5–10.
 -   Trate `data["components"]` recursivamente — cada nó contém subcomponentes.
+
+```
+
+```

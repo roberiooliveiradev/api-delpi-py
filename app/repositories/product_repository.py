@@ -816,44 +816,176 @@ class ProductRepository(BaseRepository):
         code: str,
         page: int = 1,
         page_size: int = 50,
-        branch: Optional[str] = None
+        branch: Optional[str] = None,
+        include_components: bool = False,
+        max_depth: int = 10
     ) -> dict:
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
 
+        if include_components and not 1 <= max_depth <= 50:
+            raise ValueError("max_depth must be between 1 and 50 when include_components=True")
+
         offset = (page - 1) * page_size
-        filters = ["SG2.D_E_L_E_T_ = ''", "SG2.G2_PRODUTO = ?"]
-        params = [code]
+
+        # =====================================================
+        # 🔹 MODO PADRÃO: apenas o produto informado
+        # =====================================================
+        if not include_components:
+            log_info(f"Listando roteiro de {code}, página {page}, tamanho {page_size}")
+            filters = ["SG2.D_E_L_E_T_ = ''", "SG2.G2_PRODUTO = ?"]
+            params: list = [code]
+
+            if branch:
+                filters.append("SG2.G2_FILIAL = ?")
+                params.append(branch)
+
+            where_clause = " AND ".join(filters)
+
+            # Contagem total
+            count_query = f"""
+                SELECT COUNT(*) AS total
+                FROM SG2010 AS SG2
+                WHERE {where_clause}
+            """
+            total_row = self.execute_one(count_query, tuple(params))
+            total_rows = int(total_row["total"] or 0)
+
+            # Dados paginados
+            data_query = f"""
+                SELECT 
+                    *
+                FROM SG2010 AS SG2
+                WHERE {where_clause}
+                ORDER BY SG2.G2_FILIAL, SG2.G2_PRODUTO, SG2.G2_OPERAC
+                OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+            """
+            params.extend([offset, page_size])
+            rows = self.execute_query(data_query, tuple(params))
+
+            return {
+                "success": True,
+                "total": total_rows,
+                "page": page,
+                "pageSize": page_size,
+                "totalPages": (total_rows + page_size - 1) // page_size,
+                "filters": {
+                    "branch": branch,
+                    "include_components": False,
+                    "max_depth": None
+                },
+                "data": rows
+            }
+
+        # =====================================================
+        # 🔹 MODO ESTENDIDO: produto + componentes (SG1010)
+        # =====================================================
+        log_info(
+            f"Listando roteiro de {code} e componentes (depth={max_depth}), "
+            f"página {page}, tamanho {page_size}"
+        )
+
+        # Filtros que se aplicam à tabela SG2010
+        sg2_filters = ["SG2.D_E_L_E_T_ = ''"]
+        sg2_params: list = []
 
         if branch:
-            filters.append("SG2.G2_FILIAL = ?")
-            params.append(branch)
+            sg2_filters.append("SG2.G2_FILIAL = ?")
+            sg2_params.append(branch)
 
-        where_clause = " AND ".join(filters)
+        where_clause = " AND ".join(sg2_filters)
 
-        # Contagem total
+        # ------------------------
+        # Count
+        # ------------------------
         count_query = f"""
+            WITH RECURSIVE_BOM AS (
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS componentCode,
+                    G1_QUANT AS quantity,
+                    1 AS level
+                FROM SG1010 WITH (NOLOCK)
+                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+
+                UNION ALL
+
+                SELECT 
+                    c.G1_COD,
+                    c.G1_COMP,
+                    c.G1_QUANT,
+                    p.level + 1
+                FROM SG1010 c WITH (NOLOCK)
+                INNER JOIN RECURSIVE_BOM p 
+                    ON p.componentCode = c.G1_COD
+                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
+            ),
+            CODES AS (
+                -- Produto raiz
+                SELECT ? AS productCode, 0 AS level
+                UNION
+                -- Componentes do BOM
+                SELECT DISTINCT componentCode AS productCode, level
+                FROM RECURSIVE_BOM
+            )
             SELECT COUNT(*) AS total
             FROM SG2010 AS SG2
+            INNER JOIN CODES
+                ON CODES.productCode = SG2.G2_PRODUTO
             WHERE {where_clause}
         """
-        total_row = self.execute_one(count_query, tuple(params))
+        count_params = [code, max_depth, code] + sg2_params
+        total_row = self.execute_one(count_query, tuple(count_params))
         total_rows = int(total_row["total"] or 0)
 
+        # ------------------------
         # Dados paginados
+        # ------------------------
         data_query = f"""
+            WITH RECURSIVE_BOM AS (
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS componentCode,
+                    G1_QUANT AS quantity,
+                    1 AS level
+                FROM SG1010 WITH (NOLOCK)
+                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+
+                UNION ALL
+
+                SELECT 
+                    c.G1_COD,
+                    c.G1_COMP,
+                    c.G1_QUANT,
+                    p.level + 1
+                FROM SG1010 c WITH (NOLOCK)
+                INNER JOIN RECURSIVE_BOM p 
+                    ON p.componentCode = c.G1_COD
+                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
+            ),
+            CODES AS (
+                SELECT ? AS productCode, 0 AS level
+                UNION
+                SELECT DISTINCT componentCode AS productCode, level
+                FROM RECURSIVE_BOM
+            )
             SELECT 
-                *
+                SG2.*,
+                CODES.level AS bomLevel
             FROM SG2010 AS SG2
+            INNER JOIN CODES
+                ON CODES.productCode = SG2.G2_PRODUTO
             WHERE {where_clause}
-            ORDER BY SG2.G2_FILIAL
+            ORDER BY 
+                CODES.level,        -- nível no BOM (0 = produto pai)
+                SG2.G2_PRODUTO,
+                SG2.G2_OPERAC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
-        
-        params.extend([offset, page_size])
-        rows = self.execute_query(data_query, tuple(params))
+        data_params = [code, max_depth, code] + sg2_params + [offset, page_size]
+        rows = self.execute_query(data_query, tuple(data_params))
 
         return {
             "success": True,
@@ -862,11 +994,12 @@ class ProductRepository(BaseRepository):
             "pageSize": page_size,
             "totalPages": (total_rows + page_size - 1) // page_size,
             "filters": {
-                "branch": branch
+                "branch": branch,
+                "include_components": True,
+                "max_depth": max_depth
             },
             "data": rows
         }
-
 
     def _convert_date_to_protheus(date_str: Optional[str]) -> Optional[str]:
         """
