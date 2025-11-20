@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection, get_product_analyser
 from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
@@ -257,4 +257,32 @@ def inspection(
         )
     except Exception as e:
         log_error(f"Erro ao consultar inspeção do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+@router.get(
+    "/{code}/analyser",
+    summary="Análise completa do produto (genérico + BOM + roteiro + inspeções)"
+)
+def product_analyser(
+    code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    branch: Optional[str] = Query(None),
+    max_depth: int = Query(10, ge=1, le=15)
+):
+    """
+    Retorna:
+    - Dados gerais do produto
+    - Estrutura completa (produto + componentes)
+    - Roteiro completo
+    - Inspeções QP6/QP7/QP8 de produto e componentes
+    """
+    try:
+        result = get_product_analyser(code, page, page_size, branch, max_depth)
+        return success_response(
+            data=result,
+            message=f"Análise completa de {code} retornada com sucesso."
+        )
+    except Exception as e:
+        log_error(f"Erro ao analisar completamente o produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")

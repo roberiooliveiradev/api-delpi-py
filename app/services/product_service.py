@@ -51,7 +51,6 @@ def search_products_by_description(
         log_error(f"Erro ao pesquisar produtos por descrição: {e}")
         raise DatabaseConnectionError(str(e))
 
-
 def search_products(
     page: int = 1,
     page_size: int = 50,
@@ -76,7 +75,6 @@ def get_structure(code: str, max_depth: int = 10, page: int = 1, page_size: int 
     except Exception as e:
         log_error(f"Erro ao listar estrutura do produto {code}: {e}")
         raise DatabaseConnectionError(str(e))
-
 
 def get_parents(code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
     repo = ProductRepository()
@@ -112,7 +110,6 @@ def get_inbound_invoice_items(
     except Exception as e:
         log_error(f"Erro ao listar NF-es de entrada para {code}: {e}")
         raise DatabaseConnectionError(str(e))
-
 
 def get_outbound_invoice_items(
     code: str,
@@ -163,7 +160,6 @@ def get_guide(
         log_error(f"Erro ao listar estoque para {code}: {e}")
         raise DatabaseConnectionError(str(e))
 
-
 def get_inspection(
     code: str,
     page: int = 1,
@@ -179,4 +175,39 @@ def get_inspection(
         return repo.list_inspection(code, page, page_size, branch, max_depth)
     except Exception as e:
         log_error(f"Erro ao listar inspeções para {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+
+def get_product_analyser(
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    branch: Optional[str] = None,
+    max_depth: int = 10
+) -> dict:
+    """
+    Agrega todas as consultas de produto em uma única resposta:
+    - dados gerais
+    - estrutura (BOM)
+    - roteiro (SG2)
+    - inspeções (QP6/QP7/QP8)
+    """
+    repo = ProductRepository()
+    log_info(f"Analisando produto completo {code}")
+
+    try:
+        product = repo.get_product_by_code(code)
+        structure = repo.list_structure(code, max_depth, page, page_size)
+        guide = repo.list_guide(code, page, page_size, branch, max_depth)
+        inspection = repo.list_inspection(code, page, page_size, branch, max_depth)
+
+        return {
+            "success": True,
+            "product": product,
+            "structure": structure,
+            "guide": guide,
+            "inspection": inspection,
+        }
+
+    except Exception as e:
+        log_error(f"Erro ao montar análise completa do produto {code}: {e}")
         raise DatabaseConnectionError(str(e))

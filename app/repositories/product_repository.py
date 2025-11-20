@@ -958,9 +958,8 @@ class ProductRepository(BaseRepository):
         }
 
     # -------------------------------
-    # 🔹 INSPECTION (QP6/QP7/QP8) — COMPLETO E FINAL
+    # 🔹 INSPECTION (QP6/QP7/QP8) 
     # -------------------------------
-
     def list_inspection(
         self,
         code: str,
