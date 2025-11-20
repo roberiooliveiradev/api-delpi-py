@@ -1023,7 +1023,20 @@ class ProductRepository(BaseRepository):
         qp6_sql = f"""
             {cte}
             SELECT 
-                QP6.*,
+                QP6.QP6_PRODUT,
+                QP6.QP6_REVI,
+                QP6.QP6_REVINV,
+                QP6.QP6_DESCPO,
+                QP6.QP6_DTCAD,
+                QP6.QP6_DTINI,
+                QP6.QP6_CADR,
+                QP6.QP6_PTOLER,
+                QP6.QP6_TIPO,
+                QP6.QP6_DOCOBR,
+                QP6.QP6_SITPRD,
+                QP6.QP6_DESSTP,
+                QP6.QP6_DESSTP,
+                QP6.QP6_UNMED1,
                 CODES.level,
                 CODES.parentCode
             FROM QP6010 QP6 WITH (NOLOCK)
@@ -1071,7 +1084,23 @@ class ProductRepository(BaseRepository):
         # 4) Buscar ensaios QP7 (somente desses produtos)
         # ============================================================
         qp7_sql = f"""
-            SELECT *
+            SELECT 
+                QP7_PRODUT,
+                QP7_REVI,
+                QP7_ENSAIO,
+                QP7_LABOR,
+                QP7_SEQLAB,
+                QP7_UNIMED,
+                QP7_MINMAX,
+                QP7_NOMINA,
+                QP7_LIE,
+                QP7_LSE,
+                QP7_LIC,
+                QP7_LSC,
+                QP7_CODREC,
+                QP7_OPERAC,
+                QP7_ENSOBR,
+                QP7_CERTIF
             FROM QP7010 WITH (NOLOCK)
             WHERE D_E_L_E_T_ = ''
             AND QP7_PRODUT IN ({','.join(['?'] * len(products))})
@@ -1088,7 +1117,17 @@ class ProductRepository(BaseRepository):
         # 5) Buscar ensaios QP8 (somente desses produtos)
         # ============================================================
         qp8_sql = f"""
-            SELECT *
+            SELECT 
+                QP8_PRODUT,
+                QP8_REVI,
+                QP8_ENSAIO,
+                QP8_LABOR,
+                QP8_SEQLAB,
+                QP8_TEXTO,
+                QP8_CODREC,
+                QP8_OPERAC,
+                QP8_ENSOBR,
+                QP8_CERTIF
             FROM QP8010 WITH (NOLOCK)
             WHERE D_E_L_E_T_ = ''
             AND QP8_PRODUT IN ({','.join(['?'] * len(products))})
@@ -1114,11 +1153,11 @@ class ProductRepository(BaseRepository):
                 "parentCode": row["parentCode"],
 
                 # Cabeçalho único
-                "qp6": row,
+                "QP6": row,
 
                 # Ensaios separados
-                "qp7": qp7_map.get(prod, []),
-                "qp8": qp8_map.get(prod, []),
+                "QP7": qp7_map.get(prod, []),
+                "QP8": qp8_map.get(prod, []),
             })
 
         return {
