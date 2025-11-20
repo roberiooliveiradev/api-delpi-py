@@ -242,7 +242,6 @@ def inspection(
     code: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
-    branch: Optional[str] = Query(None, description="Filial (QP6_FILIAL)"),
     max_depth: int = Query(10, ge=1, le=15)
 ):
     """
@@ -250,7 +249,7 @@ def inspection(
     incluindo inspeções dos componentes (via SG1010).
     """
     try:
-        result = get_inspection(code, page, page_size, branch, max_depth)
+        result = get_inspection(code, page, page_size, max_depth)
         return success_response(
             data=result,
             message=f"Inspeção de {code} retornada com sucesso (página {page}/{result['totalPages']})."
@@ -267,7 +266,6 @@ def product_analyser(
     code: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
-    branch: Optional[str] = Query(None),
     max_depth: int = Query(10, ge=1, le=15)
 ):
     """
@@ -278,7 +276,7 @@ def product_analyser(
     - Inspeções QP6/QP7/QP8 de produto e componentes
     """
     try:
-        result = get_product_analyser(code, page, page_size, branch, max_depth)
+        result = get_product_analyser(code, page, page_size, max_depth)
         return success_response(
             data=result,
             message=f"Análise completa de {code} retornada com sucesso."

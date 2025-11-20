@@ -965,7 +965,6 @@ class ProductRepository(BaseRepository):
         code: str,
         page: int = 1,
         page_size: int = 50,
-        branch: Optional[str] = None,
         max_depth: int = 10
     ) -> dict:
 

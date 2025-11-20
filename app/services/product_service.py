@@ -164,7 +164,6 @@ def get_inspection(
     code: str,
     page: int = 1,
     page_size: int = 50,
-    branch: Optional[str] = None,
     max_depth: int = 10
 ) -> dict:
 
@@ -172,7 +171,7 @@ def get_inspection(
     log_info(f"Buscando inspeções de processo para {code} (página {page})")
 
     try:
-        return repo.list_inspection(code, page, page_size, branch, max_depth)
+        return repo.list_inspection(code, page, page_size, max_depth)
     except Exception as e:
         log_error(f"Erro ao listar inspeções para {code}: {e}")
         raise DatabaseConnectionError(str(e))
@@ -181,7 +180,6 @@ def get_product_analyser(
     code: str,
     page: int = 1,
     page_size: int = 50,
-    branch: Optional[str] = None,
     max_depth: int = 10
 ) -> dict:
     """
@@ -197,8 +195,8 @@ def get_product_analyser(
     try:
         product = repo.get_product_by_code(code)
         structure = repo.list_structure(code, max_depth, page, page_size)
-        guide = repo.list_guide(code, page, page_size, branch, max_depth)
-        inspection = repo.list_inspection(code, page, page_size, branch, max_depth)
+        guide = repo.list_guide(code, page, page_size, None, max_depth)
+        inspection = repo.list_inspection(code, page, page_size, max_depth)
 
         return {
             "success": True,
