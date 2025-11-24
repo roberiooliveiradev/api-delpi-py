@@ -17,7 +17,7 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 | ------ | ----------------------------------------- | ------------------------------------------------------------- |
 | `GET`  | `/products/`                              | Lista produtos com limite definido                            |
 | `GET`  | `/products/search/description`            | Busca avançada por descrição com score                        |
-| `GET`  | `/products/search`                        | Pesquisa produto específico por código, descrição ou grupo    |
+| `POST` | `/products/search`                        | Pesquisa produto específico por código, descrição ou grupo    |
 | `GET`  | `/products/{code}`                        | Consulta produto específico                                   |
 | `GET`  | `/products/{code}/structure`              | Estrutura do produto (componentes) via CTE                    |
 | `GET`  | `/products/{code}/parents`                | Produtos que utilizam o item (pais) via CTE                   |
@@ -26,6 +26,7 @@ A API **Product** fornece acesso aos dados de produtos e suas relações no **Pr
 | `GET`  | `/products/{code}/outbound-invoice-items` | Notas fiscais de saída do item                                |
 | `GET`  | `/products/{code}/stock`                  | Consulta estoque com filtros e paginação                      |
 | `GET`  | `/products/{code}/guide`                  | Roteiro de produção (SG2010) com opção de incluir componentes |
+| `GET`  | `/products/{code}/inspection`             | Cadastro de inspeções de produtos e sesu componentes          |
 
 ---
 
@@ -72,7 +73,7 @@ GET /products?limit=20
 
 ---
 
-### 🔍 2. Nova Rota — Busca Avançada por Descrição
+### 🔹 2. Busca Avançada por Descrição
 
 #### **GET /products/search/description**
 
@@ -174,7 +175,7 @@ GET /products/search/description?description=TERM BANDEIRA&page=1&page_size=5
 
 ---
 
-### 🔹 3. Pesquisa de Produtos
+### 3. Pesquisa de Produtos
 
 A rota permite realizar uma busca inteligente em produtos do Protheus, utilizando:
 
@@ -531,17 +532,16 @@ Consulta o roteiro de produção do item na tabela **SG2010**.
 Pode retornar apenas o roteiro do produto principal ou incluir também o roteiro de todos os seus componentes, utilizando a árvore de estrutura (BOM — SG1010).
 
 ```http
-GET /products/{code}/guide?page=1&page_size=50&branch=01&include_components=true&max_depth=10
+GET /products/{code}/guide?page=1&page_size=50&branch=01&&max_depth=10
 ```
 
-| Parâmetro            | Tipo | Obrigatório | Descrição                                                              |
-| -------------------- | ---- | ----------- | ---------------------------------------------------------------------- |
-| `code`               | str  | ✔           | Código do produto (`G2_PRODUTO`)                                       |
-| `page`               | int  | ✖           | Página atual (default: 1)                                              |
-| `page_size`          | int  | ✖           | Registros por página (default: 50, máx: 500)                           |
-| `branch`             | str  | ✖           | Filial (`G2_FILIAL`)                                                   |
-| `include_components` | bool | ✖           | Se `true`, retorna o roteiro do produto **e de todos os componentes**  |
-| `max_depth`          | int  | ✖           | Profundidade da estrutura ao buscar componentes (default: 10, máx: 50) |
+| Parâmetro   | Tipo | Obrigatório | Descrição                                                              |
+| ----------- | ---- | ----------- | ---------------------------------------------------------------------- |
+| `code`      | str  | ✔           | Código do produto (`G2_PRODUTO`)                                       |
+| `page`      | int  | ✖           | Página atual (default: 1)                                              |
+| `page_size` | int  | ✖           | Registros por página (default: 50, máx: 500)                           |
+| `branch`    | str  | ✖           | Filial (`G2_FILIAL`)                                                   |
+| `max_depth` | int  | ✖           | Profundidade da estrutura ao buscar componentes (default: 10, máx: 50) |
 
 #### 🧠 Comportamento da rota
 
@@ -568,7 +568,7 @@ GET /products/{code}/guide?page=1&page_size=50&branch=01&include_components=true
 **📘 Exemplo de requisição**
 
 ```http
-GET /products/10080522/guide?include_components=true&page=1&page_size=20
+GET /products/10080522/guide?page=1&page_size=20
 ```
 
 **📘 Exemplo de resposta**
@@ -609,6 +609,251 @@ GET /products/10080522/guide?include_components=true&page=1&page_size=20
 }
 ```
 
+**📘 Unidade das colunas**
+
+| Coluna    | Unidade  | Obs                                                                                        |
+| --------- | -------- | ------------------------------------------------------------------------------------------ |
+| G2_SETUP  | Minutos  | Tempo gasto para preparação (Setup) do Recurso para a operação.                            |
+| G2_TEMPAD | Hora/Mil | Tempo Padrão de Operação. Tempo gasto nesta Operação para processamento de um Lote Padrão. |
+
+> Indicar a filial de referência **coluna G2_FILIAL**
+
+#### 🧮 Cálculo de Tempo Total de Produção (com Estrutura SG1010)
+
+Ao calcular o **tempo total de produção de um item**, deve-se considerar o roteiro (SG2010) e a estrutura (SG1010).
+
+| Fonte      | Campo       | Unidade            | Descrição                                                                         |
+| ---------- | ----------- | ------------------ | --------------------------------------------------------------------------------- |
+| **SG2010** | `G2_SETUP`  | **Hora**           | Tempo fixo de preparação (setup) executado uma vez por operação.                  |
+| **SG2010** | `G2_TEMPAD` | **Hora/Mil**       | Tempo padrão da operação — expresso em horas para processar 1000 peças.           |
+| **SG1010** | `G1_QUANT`  | **Qtd/1000 peças** | Quantidade de componentes necessários para produzir 1000 unidades do produto pai. |
+
+🧩 **Fórmula geral (por peça):**
+
+\[
+\text{Tempo por peça (h)} = \sum \left( G2_SETUP + \frac{G2_TEMPAD \times G1_QUANT}{1000 \times 1000} \right)
+\]
+
+⚙️ **Fórmula para um lote:**
+
+\[
+\text{Tempo Total (h)} = \text{Tempo por peça (h)} \times \text{Qtd_Peças}
+\]
+
+### 🔹 **Regras:**
+
+-   A **quantidade de componentes (G1_QUANT)** deve ser obtida da estrutura do produto, via:
+    ```http
+    GET /products/{code}/structure?max_depth=10
+    ```
+-   O **setup (`G2_SETUP`)** é somado integralmente (ocorre uma vez por operação).
+-   O **tempo padrão (`G2_TEMPAD`)** e a **quantidade do componente (`G1_QUANT`)** são normalizados por mil peças — portanto, devem ser divididos por 1000 duas vezes (mil × mil).
+-   Após obter o tempo de **1 peça**, multiplica-se pela **quantidade solicitada pelo usuário**.
+-   O resultado final é expresso em **horas totais**, podendo ser convertido para minutos (×60).
+
+**Exemplo prático**
+
+| Produto  | Operação | G2_SETUP (h) | G2_TEMPAD (h/mil) | G1_QUANT | Tempo por Peça (h)                        | Tempo 33 Peças (h) |
+| -------- | -------- | ------------ | ----------------- | -------- | ----------------------------------------- | ------------------ |
+| 90264022 | 010      | 0.02         | 3.00              | 2000     | 0.02 + (3.00 × 2000 / 1.000.000) = 0.026  | 0.86               |
+| 70260035 | 020      | 0.05         | 1.50              | 1000     | 0.05 + (1.50 × 1000 / 1.000.000) = 0.0515 | 1.70               |
+
+**Tempo total do roteiro (33 peças):**  
+\[
+(0.026 + 0.0515) \times 33 = 2.56\,h = 153.6\,min
+\]
+
+> O agente DELPI deve sempre calcular **tempo por peça primeiro**, e só depois multiplicar pela **quantidade solicitada**, garantindo consistência entre o roteiro (SG2010) e a estrutura (SG1010), ambos expressos **por mil peças**.
+
+---
+
+### 🔹 11. Inspeção de Processo (Inspection)
+
+Retorna todas as informações de inspeção do produto informado **e de todos os seus componentes** em todos os níveis da estrutura (SG1).
+
+A consulta utiliza as seguintes tabelas Protheus:
+
+-   **SG1010 – Estrutura de Produto**  
+    Usada para determinar todos os componentes em todos os níveis.
+-   **QP6010 – Cabeçalho da Inspeção**  
+    Traz dados gerais de inspeção para cada produto.
+-   **QP7010 – Ensaios Mensuráveis**  
+    Traz valores numéricos de inspeção (mínimo, máximo, nominal, limites etc.).
+-   **QP8010 – Ensaios Textuais**  
+    Traz ensaios com resultados em formato de texto.
+
+---
+
+```http
+ GET /products/{code}/inspection?page=1&page_size=50&max_depth=10
+```
+
+##### 📌 Parâmetros
+
+| Parâmetro   | Tipo | Obrigatório | Descrição                                                     |
+| ----------- | ---- | ----------- | ------------------------------------------------------------- |
+| `code`      | str  | ✔           | Código do produto (`QP6_PRODUT`)                              |
+| `page`      | int  | ✖           | Página atual (default: 1)                                     |
+| `page_size` | int  | ✖           | Registros por página (default: 50, máximo: 500)               |
+| `max_depth` | int  | ✖           | Profundidade da estrutura ao buscar componentes (default: 10) |
+
+---
+
+---
+
+#### 🔧 **Como funciona**
+
+1. A API recebe um código de produto.
+2. Usa SG1 para montar **toda a árvore de componentes**, incluindo múltiplos níveis.
+3. Para **cada produto encontrado** (pai + componentes):
+    - Busca **QP6** (um único cabeçalho por produto).
+    - Busca **QP7** (lista de ensaios mensuráveis).
+    - Busca **QP8** (lista de ensaios texto).
+4. Retorna uma lista onde cada item representa **um produto** com:
+    - `product` → código do produto
+    - `level` → nível dentro da estrutura
+    - `parentCode` → código do pai
+    - `QP6` → objeto único
+    - `QP7` → lista
+    - `QP8` → lista
+
+**📘 Exemplo de requisição**
+
+```http
+GET /products/90264022/inspection?page=1&page_size=10&max_depth=10
+```
+
+---
+
+**📘 Exemplo de resposta**
+
+```json
+{
+  "success": true,
+  "message": "Inspeção de 90264022 retornada com sucesso (página 1/1).",
+  "data": [
+    {
+      "product": "90264022",
+      "level": 0,
+      "parentCode": "",
+      "QP6": { ... },
+      "QP7": [],
+      "QP8": [ ... ]
+    },
+    {
+      "product": "70260035",
+      "level": 1,
+      "parentCode": "90264022",
+      "QP6": { ... },
+      "QP7": [ ... ],
+      "QP8": [ ... ]
+    }
+  ]
+}
+```
+
+#### 📘 **Observações importantes**
+
+-   Somente produtos que possuem **registro na QP6** aparecem no resultado.
+-   Componentes que não possuam inspeção configurada são ignorados.
+-   O retorno **não é hierárquico** — a estrutura é linear, com os níveis informados em `level`.
+-   `parentCode` permite reconstruir a árvore se necessário.
+
+---
+
+#### 📌 Campos Retornados
+
+##### 🔹 qp6 — Cabeçalho da inspeção
+
+Campos como:
+
+-   QP6_PRODUT
+-   QP6_REVI
+-   QP6_DESCPO
+-   QP6_DTCAD
+-   QP6_PTOLER
+-   QP6_TIPO
+-   QP6_SITPRD
+
+##### 🔹 ensaios_mensuraveis — QP7010
+
+-   QP7_ENSAIO
+-   QP7_UNIMED
+-   QP7_MIN / QP7_MAX
+-   QP7_LABOR
+
+##### 🔹 ensaios_textuais — QP8010
+
+-   QP8_ENSAIO
+-   QP8_TEXTO
+-   QP8_LABOR
+-   QP8_OPERAC
+
+---
+
+#### 🧩 Dicas para o agente GPT
+
+-   Use `max_depth >= 5` para inspeções completas.
+-   Use paginação sempre em estruturas grandes.
+-   Para apenas o produto principal, use `max_depth = 0–1`.
+
+---
+
+### 🔹 12. Análise Completa do Produto (Product Analyser)
+
+A rota **Product Analyser** consolida em **uma única chamada**:
+
+-   Dados gerais (SB1)\
+-   Estrutura completa (BOM via SG1010)\
+-   Roteiro completo (SG2010)\
+-   Inspeções completas (QP6, QP7, QP8)
+
+---
+
+#### 📘 Endpoint
+
+```http
+GET /products/{code}/analyser?page=1&page_size=50&max_depth=10
+```
+
+---
+
+#### 📌 Parâmetros
+
+Parâmetro Tipo Obrigatório Descrição
+
+| Parâmetro   | Tipo | Obrigatório | Descrição                                                             |
+| ----------- | ---- | ----------- | --------------------------------------------------------------------- |
+| `code`      | str  | ✔           | Código do produto (`B1_COD`)                                          |
+| `page`      | int  | ✖           | Página (default: 1)                                                   |
+| `page_size` | int  | ✖           | Registros por página (default 50, máximo 500)                         |
+| `max_depth` | int  | ✖           | Profundidade da estrutura ao buscar componentes (default: 10, máx 15) |
+
+---
+
+#### 📘 Exemplo de Requisição
+
+```http
+GET /products/10080522/analyser?page=1&page_size=20&max_depth=10
+```
+
+---
+
+#### 📘 Exemplo de Resposta
+
+```json
+{
+  "success": true,
+  "message": "Análise completa de 10080522 retornada com sucesso.",
+  "data": {
+    "product": { ... },
+    "structure": { ... },
+    "guide": { ... },
+    "inspection": { ... }
+  }
+}
+```
+
 ---
 
 ## 🧠 Dicas para o agente GPT
@@ -618,7 +863,3 @@ GET /products/10080522/guide?include_components=true&page=1&page_size=20
 -   Sempre incluir paginação (`page`, `page_size`) para respostas grandes.
 -   Campos `max_depth` > 10 podem ser lentos; mantenha entre 5–10.
 -   Trate `data["components"]` recursivamente — cada nó contém subcomponentes.
-
-```
-
-```

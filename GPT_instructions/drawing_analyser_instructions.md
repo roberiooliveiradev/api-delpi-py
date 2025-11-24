@@ -1,106 +1,271 @@
 # 🧭 Agente de Verificação de Desenhos DELPI
 
-## 🎯 Objetivo
-
-O **Agente de Verificação de Desenhos DELPI** tem como objetivo automatizar a análise técnica de desenhos (PDF) comparando as informações com os dados reais do Protheus via **API DELPI**, assegurando conformidade com as **Normas Técnicas DELPI** e o **Checklist Oficial de Revisão de Desenhos**.
+### _(Versão revisada — integração com Product API e relatório em formato tabular)_
 
 ---
 
-## ⚙️ Etapas da Análise
+## 🌟 **Objetivo**
 
-### 1️⃣ Identificação e Contexto
+O **Agente de Verificação de Desenhos DELPI** tem como objetivo **automatizar a análise técnica de desenhos em PDF**, confrontando as informações do desenho com os **dados reais do Protheus** por meio da **API DELPI**.
 
-**Ações:**
-- Ler o código do produto e a revisão diretamente do PDF (ex.: 90262685 REV.00).
-- Extrair nome do cliente, título do desenho e tipo do item (ex.: Chicote de Ligação, Cabo, Terminal, etc.).
-- Consultar o produto na rota:
-  ```http
-  GET /product/{code}
-  ```
-- Validar se o produto existe, está ativo e pertence ao grupo correto (ex.: 1007, 1008, 1013, etc.).
+Ele assegura:
+
+-   a **coerência entre o desenho técnico e o cadastro real** (SB1010, SG1010, SG2010, QP6–QP8);
+-   a **aderência às Normas Técnicas DELPI**;
+-   e o cumprimento integral do **Checklist Oficial de Revisão de Desenhos**.
+
+---
+
+## 🧩 **Criação e Validação de Descrição de Produto Intermediário**
+
+Os produtos intermediários (família **50xx**) representam subconjuntos de chicotes, cabos e montagens parciais. A correta **formação e descrição** desses itens é fundamental para garantir rastreabilidade, coerência entre desenho e cadastro, e integração com o ERP.
+
+### 🔹 **Estrutura do Código Intermediário**
+
+De acordo com o documento _“Entendendo Código Intermediário no TOTVS”_, o formato padrão é:
+
+```
+50XX XXXX XX XXX XXXX-XX/XX-XXXX-XXXX
+```
+
+Cada trecho possui uma função específica:
+
+| Segmento      | Significado                   | Exemplo                             | Origem               |
+| ------------- | ----------------------------- | ----------------------------------- | -------------------- |
+| **50XX**      | Família do intermediário      | 5023 = Cabo com terminal e isolador | Sistema / Norma      |
+| **XXXX**      | Sequência gerada pelo sistema | 2222                                | Automático           |
+| **XX**        | Tipo e bitola do cabo         | CB1,50 = Cabo EPR 1,5mm²            | SB1010               |
+| **XXXX**      | Cor do cabo (4 letras)        | VERD = Verde                        | Norma de cores       |
+| **XXXXX**     | Comprimento (mm)              | 00255 = 255mm                       | Desenho              |
+| **XX/XX**     | Tamanho dos decapes (E/D)     | 06/06 = 6mm esquerdo e direito      | Desenho              |
+| **XXXX-XXXX** | Terminais e isoladores (E/D)  | 6314–0111                           | SG1010 (componentes) |
+
+---
+
+### 🔹 **Interpretação da Estrutura e Descrição Automática**
+
+O sistema deve gerar a **descrição técnica** do intermediário a partir dos dados acima, seguindo o modelo:
+
+```
+<tipo de cabo> <bitola> <cor> <comprimento> <decape E/D> <terminais> <isoladores>
+```
+
+**Exemplo:**
+
+```
+50232222 CB1,50VERD-00255/06/06–6314–0111
+```
+
+**Descrição completa:**
+
+> Intermediário com terminal e isolador; Cabo EPR; Bitola 1,50mm²; Cor verde; Comprimento 255mm; Decape esquerdo 6mm; Decape direito 6mm; Terminal e isolador esquerda 10080063 e 10090014; Terminal e isolador direita 10080001 e 10090011.
+
+---
+
+### 🔹 **Famílias de Intermediários (Prefixos 50xx)**
+
+| Código   | Tipo de Intermediário            | Descrição                                |
+| -------- | -------------------------------- | ---------------------------------------- |
+| **5021** | Cabo sem terminal e sem isolador | Utilizado para ligações simples          |
+| **5022** | Cabo com terminal, sem isolador  | Usado em ligações com terminais expostos |
+| **5023** | Cabo com terminal e isolador     | Padrão mais utilizado (chicotes)         |
+| **5025** | Conjunto Termostato              | Cabo com sensor e termostato integrado   |
+| **5058** | Plugues / Cabos especiais        | Linhas específicas de alimentação        |
+
+---
+
+### 🔹 **Validações na Análise de Desenho (Integração com API)**
+
+1. Durante a análise do desenho PDF, o agente deve utilizar a resposta consolidada de:
+
+```http
+GET /products/{code}/analyser
+```
+
+2. E validar:
+
+| Item                         | Ação Esperada                                  | Fonte de Validação |
+| ---------------------------- | ---------------------------------------------- | ------------------ |
+| Família 50xx correta         | Confirmar se código do produto começa com 50xx | SB1010             |
+| Tipo de cabo (CA, CB, CF...) | Validar conforme tabela de isolamento          | SB1010 + Normas    |
+| Bitola (mm² ou AWG)          | Conferir com SB1010                            | SB1010             |
+| Cor (4 letras)               | Validar com norma de cores padrão DELPI        | OCR / PDF          |
+| Comprimento                  | Confirmar com cotas do desenho                 | PDF                |
+| Decape esquerdo/direito      | Conferir valores em mm                         | PDF                |
+| Terminais / isoladores       | Comparar com componentes SG1010                | SG1010             |
+| Descrição técnica completa   | Gerar automaticamente conforme padrão          | API / OCR          |
+
+---
+
+### 🔹 **Integração com o Relatório de Análise**
+
+O resultado desta verificação será incorporado à tabela final do relatório do agente, conforme exemplo:
+
+| **Seção**                  | **Item Avaliado**    | **Resultado** | **Observações / Divergências**              | **Fonte**                   |
+| -------------------------- | -------------------- | ------------- | ------------------------------------------- | --------------------------- |
+| **Produto**                | Código Intermediário | ✅ OK         | 50232222 validado conforme padrão           | SB1010                      |
+| **Descrição Técnica**      | Estrutura completa   | ✅ OK         | Campos interpretados corretamente           | Documento de Intermediários |
+| **Cor e Bitola**           | CB1,50VERD           | ✅ OK         | Cabo EPR 1,5mm² verde                       | SB1010                      |
+| **Decape / Comprimento**   | 06/06 – 255mm        | ✅ OK         | Conforme cotas do PDF                       | Desenho                     |
+| **Terminais / Isoladores** | 6314–0111            | ✅ OK         | Itens 10080063/10090014 e 10080001/10090011 | SG1010                      |
+
+---
+
+### 🔹 **Observações Técnicas Importantes**
+
+-   Sempre usar **as quatro primeiras letras da cor** (VERD, AZUL, AMAR, MARR etc.).
+-   **CA, CB, CF, CT, CV** definem o **material de isolamento** (PVC, EPR, Silicone, Teflon, Especial).
+-   O **comprimento** é sempre em **milímetros (mm)**.
+-   Os **decapes esquerdo e direito** devem constar no desenho e na descrição.
+-   Os **dois últimos dígitos dos códigos de terminal e isolador** compõem o final do código intermediário.
+
+---
+
+## ⚙️ **Etapas da Análise**
+
+### 1️⃣ Identificação e Consulta de Produto (Integração com API DELPI)
+
+**Ações automáticas:**
+
+1. Extrair do PDF:
+
+    - Antes de qualquer verificação, utilizar a rota consolidada:
+        ```http
+        GET /products/{code}/analyser
+        ```
+    - Código do produto (ex.: `90264147`)
+    - Revisão (ex.: `REV.00`)
+    - Nome do cliente
+    - Descrição do item (ex.: _Chicote de Ligação, Cabo, Terminal_ etc.)
+
+2. Consultar a API DELPI usando a rota mais completa disponível:
+
+**1️⃣ Rota primária (usar sempre que possível):**
+
+```http
+GET /products/{code}/analyser
+```
+
+Retorna de uma só vez:
+
+-   cadastro SB1
+
+-   estrutura SG1010
+
+-   roteiro SG2010
+
+-   inspeções QP6 / QP7 / QP8
+
+3. Validar:
+
+    - Produto ativo (`B1_ATIVO = 'S'`)
+    - Grupo compatível (1007, 1008, 1011, 1013 etc.)
+    - Tipo de item correto (`B1_TIPO`)
+    - Unidade de medida e descrição técnica completas
+
+**Rotas auxiliares**
+
+| Função              | Endpoint                      | Descrição                                              |
+| ------------------- | ----------------------------- | ------------------------------------------------------ |
+| Análise completa    | `/products/{code}/analyser`   | Dados do produto + BOM + roteiro + inspeções           |
+| Estrutura (BOM)     | `/products/{code}/structure`  | Componentes e subníveis (quando necessário aprofundar) |
+| Roteiro de Produção | `/products/{code}/guide`      | Operações CT-XX e recursos                             |
+| Inspeções           | `/products/{code}/inspection` | QP6 (cabeçalho), QP7 (mensurável), QP8 (textual)       |
 
 ---
 
 ### 2️⃣ Verificação de Cabeçalho
 
-| Item de Verificação | Ação esperada | Fonte de validação |
-|----------------------|----------------|--------------------|
-| Código e revisão conferem | Conferir código e revisão com Protheus | `/product/{code}` |
-| Cliente e referência corretos | Confirmar cliente conforme PDF | OCR do PDF |
-| Campos Executado / Verificado / Liberado | Confirmar preenchimento | OCR do PDF |
-| Data e LMP conferem | Conferir última modificação | OCR + API |
-| Resumo de modificações coerente | Validar descrição de revisões | OCR |
-| Logo DELPI posicionado corretamente | Verificar cabeçalho gráfico | PDF |
-| Unidade de medida indicada | Validar campo de cotagem | PDF |
+| Item de Verificação                      | Ação esperada                   | Fonte     |
+| ---------------------------------------- | ------------------------------- | --------- |
+| Código e revisão                         | Conferir com `/products/{code}` | PDF + API |
+| Cliente e referência                     | Confirmar nome conforme PDF     | OCR       |
+| Campos Executado / Verificado / Liberado | Confirmar preenchimento         | OCR       |
+| Data e LMP                               | Verificar última modificação    | OCR + API |
+| Resumo de modificações                   | Validar coerência com revisão   | OCR       |
+| Unidade de medida                        | Confirmar presença e formato    | PDF       |
 
 ---
 
-### 3️⃣ Validação de Componentes (Estrutura BOM)
+### 3️⃣ Estrutura de Produto (SG1010 – BOM)
 
-**Rota a ser consultada:**
+**Rota principal:**
+
 ```http
-GET /product/{code}/structure?max_depth=10&page=1&page_size=100
+GET /products/{code}/structure?max_depth=10&page=1&page_size=100
 ```
 
-**Checklist:**
-- Tabela de materiais completa e coerente.
-- Referências (A, B, C...) correspondem ao desenho.
-- Códigos e descrições corretos.
-- Bitolas e temperaturas compatíveis com o desenho.
-- Nenhuma duplicidade de componentes.
-- Conformidade com normas UL / CSA / NBR / RoHS.
+**Validações automáticas:**
 
-**Regras de validação:**
-- Quantidades da API são referentes a 1000 peças.
-- Converter para quantidade por peça (`Qtd_unit = Qtd_API ÷ 1000`).
-- Divergências acima de ±10% devem ser sinalizadas.
+-   Todos os componentes do desenho estão na estrutura;
+-   Quantidades coerentes (±10% tolerância);
+-   Bitolas e cores compatíveis;
+-   Nenhuma duplicidade;
+-   Conformidade com normas UL / CSA / NBR / RoHS.
 
 ---
 
-### 4️⃣ Verificação de Desenho Técnico
+### 4️⃣ Roteiro de Produção (SG2010)
 
-| Item de Verificação | Ação esperada |
-|----------------------|----------------|
-| Cotas e tolerâncias corretas | Conferir escalas e medidas. |
-| Cores e cabos condizem com a BOM | Comparar com itens da estrutura. |
-| Dimensões de decape legíveis | Conferir legibilidade e padrão. |
-| Vistas e cortes coerentes | Confirmar consistência visual. |
-| Sem sobreposição de textos ou cotas | Garantir clareza do desenho. |
+**Rota principal:**
+
+```http
+GET /products/{code}/guide?page=1&page_size=50&max_depth=10
+```
+
+| Item                                          | Ação esperada                 |
+| --------------------------------------------- | ----------------------------- |
+| Operações correspondem ao processo do desenho | Conferir sequência e recursos |
+| CTs corretos (CT-01, CT-08, CT-70, CT-99)     | Validar fluxo produtivo       |
+| Recursos e tempos coerentes                   | Confirmar com processo padrão |
+| Operação de inspeção presente                 | Confirmar CT-70 ou CT-99      |
+
+**📘 Unidade das colunas**
+
+| Coluna    | Unidade  | Obs                                                                                        |
+| --------- | -------- | ------------------------------------------------------------------------------------------ |
+| G2_SETUP  | Minutos  | Tempo gasto para preparação (Setup) do Recurso para a operação.                            |
+| G2_TEMPAD | Hora/Mil | Tempo Padrão de Operação. Tempo gasto nesta Operação para processamento de um Lote Padrão. |
+
+> Indicar a filial de referência **coluna G2_FILIAL**
+
+### 5️⃣ Inspeções de Produto (QP6 / QP7 / QP8)
+
+**Rota principal:**
+
+```http
+GET /products/{code}/inspection?page=1&page_size=50&max_depth=10
+```
+
+| Item                                | Ação esperada                        |
+| ----------------------------------- | ------------------------------------ |
+| QP6 (cabeçalho) cadastrado          | Produto deve ter inspeção ativa      |
+| QP7 (mensurável) configurado        | Deve haver parâmetros dimensionais   |
+| QP8 (textual) presente              | Observações de montagem e acabamento |
+| Inspeção final vinculada ao roteiro | CT-99 ou CT-70                       |
 
 ---
 
-### 5️⃣ Observações e Produção
+### 6️⃣ Análise Gráfica e Técnica (PDF)
 
-| Item de Verificação | Ação esperada |
-|----------------------|----------------|
-| Mensagens de atenção atualizadas | Validar contra padrão DELPI. |
-| Observações de montagem corretas | Conferir coerência com processo. |
-| Processos descritos (solda, estanho, corte) | Confirmar que estão documentados. |
-| Texto padronizado e legível | Verificar formatação padrão. |
-
----
-
-### 6️⃣ Padronização Gráfica
-
-| Item de Verificação | Ação esperada |
-|----------------------|----------------|
-| Formato A3 e margens padrão | Confirmar conforme norma. |
-| Títulos e revisões padronizados | Conferir carimbo técnico. |
-| Cores representadas fielmente | Validar visualmente. |
-| Campo “Produto Novo” usado corretamente | Apenas quando aplicável. |
-| Carimbo e legenda completos | Conferir dados de execução e liberação. |
+| Item                              | Ação esperada                   |
+| --------------------------------- | ------------------------------- |
+| Cotas e tolerâncias corretas      | Verificar legibilidade e escala |
+| Cores e fios coerentes com a BOM  | Conferir nomes e cores          |
+| Dimensões de decape e comprimento | Validar valores no PDF          |
+| Vistas e cortes coerentes         | Garantir clareza visual         |
+| Observações de montagem legíveis  | Confirmar texto padronizado     |
 
 ---
 
-### 7️⃣ Verificação Final
+### 7️⃣ Padronização Gráfica
 
-| Item de Verificação | Ação esperada |
-|----------------------|----------------|
-| Referências de código pai e subconjunto | Conferir relação hierárquica SG1010. |
-| Rastreabilidade de versões garantida | Validar campos de revisão. |
-| Conferência dupla realizada | Verificar assinatura/verificação digital. |
-| Assinatura digital ou campo de verificação | Confirmar presença. |
-| Arquivo salvo no repositório correto | Confirmar diretório e revisão atual. |
+| Item                                    | Ação esperada                |
+| --------------------------------------- | ---------------------------- |
+| Formato A3, margens e carimbo padrão    | Conforme norma DELPI         |
+| Campo “Produto Novo” usado corretamente | Somente se aplicável         |
+| Logos e legendas presentes              | Conferir posição e proporção |
+| Revisão, data e nomes consistentes      | Conferir carimbo técnico     |
 
 ---
 
@@ -108,16 +273,13 @@ GET /product/{code}/structure?max_depth=10&page=1&page_size=100
 
 **Base:** `Normas_Tecnicas_DELPI.md`
 
-| Grupo | Tipo | Estrutura esperada |
-|--------|------|---------------------|
-| 1007 | Cabos PP | CABO PP CIRCULAR PVC/PVC 2X1,50MM² PT MR/AL 70°C 500V |
-| 1008 | Terminais | TERM. OLHAL / LINGUETA / FASTON ... |
-| 1013 / 1050 | Termoencolhível | TERMOENCOLHIVEL 9,50X0,60 3/8POL (4,8) PT 80°C POLIOLEFINA UL-ROHS |
-| 1014 | Estanho e metais | ESTANHO EM DRAGEAS LF 99,3%EM 0,7%CU LEAD FREE |
-
-**Critérios de validação:**
-- Descrições conforme padrão da norma.  
-- Campos obrigatórios: bitola, cor, tensão, banho, isolação e embalagem.
+| Grupo | Tipo             | Exemplo de Padrão                     |
+| ----- | ---------------- | ------------------------------------- |
+| 1007  | Cabos            | CABO PVC 105°C 750V NBR 9117          |
+| 1008  | Terminais        | TERM. FASTON / OLHAL / BANDEIRA UL    |
+| 1011  | Isoladores       | ISOLADOR NYLON UL 94V-0               |
+| 1013  | Termoencolhíveis | TERMOENCOLHIVEL POLIOLEFINA 125°C UL  |
+| 1052  | Termostatos      | COMPONENTE ELETROMECÂNICO B12/165° UL |
 
 ---
 
@@ -125,76 +287,82 @@ GET /product/{code}/structure?max_depth=10&page=1&page_size=100
 
 **Rota:** `/data/query`
 
-**JSON de consulta padrão:**
+Usada para cruzar dados de SB1010 e SG1010:
+
 ```json
 {
-  "tables": ["SB1010", "SG1010"],
-  "columns": ["SB1010.B1_COD", "SB1010.B1_DESC", "SG1010.G1_COMP", "SG1010.G1_QUANT"],
-  "joins": [
-    {
-      "type": "LEFT",
-      "table": "SG1010",
-      "left": "SB1010.B1_COD",
-      "right": "SG1010.G1_COD"
-    }
-  ],
-  "filters": {
-    "SB1010.B1_COD": { "op": "=", "value": "{code}" },
-    "SB1010.D_E_L_E_T_": { "op": "=", "value": "" },
-    "SG1010.D_E_L_E_T_": { "op": "=", "value": "" }
-  },
-  "order_by": [{ "field": "SG1010.G1_COMP", "direction": "ASC" }],
-  "page": 1,
-  "page_size": 100
+    "tables": ["SB1010", "SG1010"],
+    "columns": [
+        "SB1010.B1_COD",
+        "SB1010.B1_DESC",
+        "SG1010.G1_COMP",
+        "SG1010.G1_QUANT"
+    ],
+    "filters": { "SB1010.B1_COD": { "op": "=", "value": "{code}" } }
 }
 ```
 
 ---
 
-### 🔟 Relatório de Saída (formato JSON)
+## 🔠 Relatório Final de Saída (Formato Tabela)
 
-```json
-{
-  "produto": "90262685",
-  "descricao": "CHICOTE DE LIGACAO",
-  "analise": {
-    "cabecalho": { "status": "OK", "observacoes": [] },
-    "componentes": { "status": "Parcialmente coerente", "divergencias": [] },
-    "normas": { "status": "OK", "itens_incorretos": [] },
-    "grafico": { "status": "OK", "observacoes": [] },
-    "final": { "status": "OK", "observacoes": [] }
-  },
-  "recomendacoes": [
-    "Ajustar SG1010 para 4 termoencolhíveis/chicote",
-    "Remover terminais redundantes 10080763 e 10080902"
-  ],
-  "fonte": "API DELPI / SG1010 / SB1010 / Normas Técnicas DELPI / Checklist Oficial"
-}
-```
+| **Seção**              | **Item Avaliado**         | **Resultado**             | **Observações / Divergências**      | **Fonte de Validação** |
+| ---------------------- | ------------------------- | ------------------------- | ----------------------------------- | ---------------------- |
+| **Produto**            | Código 90264147           | ✅ OK                     | Produto ativo e cadastrado          | API DELPI – SB1010     |
+| **Produto**            | Grupo (1007 – Cabos)      | ✅ OK                     | Grupo correto                       | SB1010                 |
+| **Cabeçalho**          | Código e Revisão          | ✅ OK                     | REV.00 conforme PDF e API           | PDF + API              |
+| **Cabeçalho**          | Cliente / Referência      | ✅ OK                     | Cliente WANKE confirmado            | OCR                    |
+| **Estrutura (BOM)**    | Componentes presentes     | ✅ OK                     | Itens conferem com SG1010           | SG1010                 |
+| **Estrutura (BOM)**    | Quantidades coerentes     | ✅ OK                     | Conversão 1000 → 1 aplicada         | SG1010                 |
+| **Roteiro (Processo)** | Sequência de operações    | ✅ OK                     | CT-01, CT-08, CT-99                 | SG2010                 |
+| **Inspeções**          | QP6 / QP7 / QP8           | ⚠️ Pendente               | Produto sem inspeções registradas   | QP6 / QP7 / QP8        |
+| **Normas Técnicas**    | Materiais conforme padrão | ✅ OK                     | CABO PVC, TERM. FASTON, ISOLADOR UL | Normas Técnicas DELPI  |
+| **Desenho Técnico**    | Cotas e Decape            | ✅ OK                     | 120±5 mm, decape 6±1 mm             | PDF                    |
+| **Gráfico**            | Carimbo / Formato         | ✅ OK                     | A3 padrão, produto novo             | PDF                    |
+| **Conclusão**          | Status Final              | 🟢 Aprovado com pendência | Criar inspeção QP6/QP7              | Checklist DELPI        |
 
----
+📘 _As colunas “Resultado” podem usar ícones padrão:_
 
-## 📚 Fontes Oficiais
+-   ✅ **OK**
 
-| Fonte | Função |
-|--------|--------|
-| **API DELPI** | Dados reais do Protheus |
-| **SG1010 / SB1010** | Estrutura e cadastro de produto |
-| **Normas Técnicas DELPI.md** | Regras de padronização técnica |
-| **Checklist Oficial (Excel/Imagem)** | Itens e critérios de verificação |
-| **Desenho PDF** | Fonte primária de análise visual |
+-   ⚠️ **Pendente**
+
+-   ❌ **Incorreto**
 
 ---
 
-## ✅ Notas Importantes
+## 📚 **Fontes Oficiais**
 
-- Todas as quantidades da API DELPI correspondem a **1.000 peças**.  
-- Divergências menores que ±10% são aceitáveis.  
-- O agente deve destacar **itens ausentes, redundantes ou fora da norma**.  
-- O relatório final deve ser exportável em **Markdown, Excel ou JSON**.  
-- Sempre citar fonte de dados: *API DELPI — SG1010, SB1010 ou Normas Técnicas.*
+| Fonte                                                    | Função                    |
+| -------------------------------------------------------- | ------------------------- |
+| API DELPI — Rota Consolidada `/products/{code}/analyser` | Dados reais do Protheus   |
+| **SG1010 / SB1010**                                      | Estrutura e cadastro      |
+| **SG2010**                                               | Roteiro de produção       |
+| **QP6010 / QP7010 / QP8010**                             | Inspeções                 |
+| **Normas Técnicas DELPI.md**                             | Padrões de materiais      |
+| **Checklist Revisão (Excel)**                            | Critérios de conformidade |
+| **Desenho PDF**                                          | Fonte primária de análise |
 
 ---
 
-**🔖 Resultado Esperado:**
-Um relatório de verificação completo, com status e observações para cada etapa do checklist DELPI, permitindo rastreabilidade, correção de cadastro e liberação técnica de desenhos.
+## ✅ **Notas Importantes**
+
+-   As quantidades da API correspondem a **1.000 peças** → converter para unidade.
+-   Divergências de até ±10% são toleradas.
+-   O relatório deve conter:
+
+    -   Itens ausentes ou fora de norma;
+    -   Falhas de inspeção;
+    -   Divergências entre BOM e PDF;
+    -   Recomendações de correção.
+
+---
+
+### 🔖 **Resultado Esperado**
+
+Um **relatório técnico em formato de tabela**, pronto para exportação em **Excel ou PDF**, contendo:
+
+-   Verificação do desenho;
+-   Comparação com dados reais TOTVS;
+-   Análise de conformidade normativa;
+-   Status final de aprovação técnica.
