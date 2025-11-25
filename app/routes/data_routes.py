@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from app.services.data_service import run_dynamic_query
-from app.models.data_query_model import DataQueryRequest
+from app.models.data_query_model import DataQueryRequestOpenAPI
 from app.core.responses import success_response, error_response
 from app.utils.logger import log_info, log_error
 
@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.post("/query", summary="Consulta genérica (CTE, aliases, agregações, filtros, paginação)")
-async def query_tables(request: Request, req: DataQueryRequest):
+async def query_tables(request: Request, req: DataQueryRequestOpenAPI):
     """
     Executa consultas dinâmicas com suporte a:
     - Múltiplas CTEs (WITH ...)

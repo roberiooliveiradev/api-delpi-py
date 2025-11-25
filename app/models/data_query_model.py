@@ -101,5 +101,14 @@ class DataQueryRequest(BaseModel):
         description="Tamanho da página da consulta principal."
     )
 
+class DataQueryRequestOpenAPI(BaseModel):
+    tables: List[str] = Field(..., description="Tabelas ou CTEs")
+    columns: Optional[List[str]] = ["*"]
+    group_by: Optional[List[str]] = None
+    aggregates: Optional[Dict[str, str]] = None
+    having: Optional[Dict[str, Any]] = None
+    order_by: Optional[List[Dict[str, str]]] = None
+    page: Optional[int] = 1
+    page_size: Optional[int] = 50
 
 DataQueryRequest.model_rebuild()
