@@ -102,7 +102,7 @@ class DataQueryRequest(BaseModel):
     )
 
 class DataQueryRequestOpenAPI(BaseModel):
-    with_: Optional[Any] = None
+    with_: Optional[Dict[str, Dict[str, Any]]] = Field(None, alias="with")
     tables: List[str]
     columns: Optional[List[str]] = ["*"]
     joins: Optional[List[Dict[str, Any]]] = None
