@@ -622,30 +622,19 @@ GET /products/10080522/guide?page=1&page_size=20
 
 Ao calcular o **tempo total de produção de um item**, deve-se considerar o roteiro (SG2010) e a estrutura (SG1010).
 
-| Fonte      | Campo       | Unidade            | Descrição                                                                         |
-| ---------- | ----------- | ------------------ | --------------------------------------------------------------------------------- |
-| **SG2010** | `G2_SETUP`  | **Hora**           | Tempo fixo de preparação (setup) executado uma vez por operação.                  |
-| **SG2010** | `G2_TEMPAD` | **Hora/Mil**       | Tempo padrão da operação — expresso em horas para processar 1000 peças.           |
-| **SG1010** | `G1_QUANT`  | **Qtd/1000 peças** | Quantidade de componentes necessários para produzir 1000 unidades do produto pai. |
+| Fonte      | Campo       | Unidade      | Descrição                                                               |
+| ---------- | ----------- | ------------ | ----------------------------------------------------------------------- |
+| **SG2010** | `G2_SETUP`  | **Hora**     | Tempo fixo de preparação (setup) executado uma vez por operação.        |
+| **SG2010** | `G2_TEMPAD` | **Hora/Mil** | Tempo padrão da operação — expresso em horas para processar 1000 peças. |
 
 🧩 **Fórmula geral (por peça):**
 
 \[
-\text{Tempo por peça (h)} = \sum \left( G2_SETUP + \frac{G2_TEMPAD \times G1_QUANT}{1000 \times 1000} \right)
-\]
-
-⚙️ **Fórmula para um lote:**
-
-\[
-\text{Tempo Total (h)} = \text{Tempo por peça (h)} \times \text{Qtd_Peças}
+\text{Tempo Total (h)} = \sum G2_SETUP + \sum \left( \frac{G2_TEMPAD}{1000} \times \text{Qtd_Peças} \right)
 \]
 
 ### 🔹 **Regras:**
 
--   A **quantidade de componentes (G1_QUANT)** deve ser obtida da estrutura do produto, via:
-    ```http
-    GET /products/{code}/structure?max_depth=10
-    ```
 -   O **setup (`G2_SETUP`)** é somado integralmente (ocorre uma vez por operação).
 -   O **tempo padrão (`G2_TEMPAD`)** e a **quantidade do componente (`G1_QUANT`)** são normalizados por mil peças — portanto, devem ser divididos por 1000 duas vezes (mil × mil).
 -   Após obter o tempo de **1 peça**, multiplica-se pela **quantidade solicitada pelo usuário**.
@@ -653,17 +642,20 @@ Ao calcular o **tempo total de produção de um item**, deve-se considerar o rot
 
 **Exemplo prático**
 
-| Produto  | Operação | G2_SETUP (h) | G2_TEMPAD (h/mil) | G1_QUANT | Tempo por Peça (h)                        | Tempo 33 Peças (h) |
-| -------- | -------- | ------------ | ----------------- | -------- | ----------------------------------------- | ------------------ |
-| 90264022 | 010      | 0.02         | 3.00              | 2000     | 0.02 + (3.00 × 2000 / 1.000.000) = 0.026  | 0.86               |
-| 70260035 | 020      | 0.05         | 1.50              | 1000     | 0.05 + (1.50 × 1000 / 1.000.000) = 0.0515 | 1.70               |
+| Operação | G2_SETUP (h) | G2_TEMPAD (h/mil) | Qtd Peças | Cálculo                   | Tempo (h) |
+| -------- | ------------ | ----------------- | --------- | ------------------------- | --------- |
+| 01       | 0.02         | 3.00              | 33        | 0.02 + (3.00 / 1000 × 33) | 0.119     |
+| 02       | 0.05         | 1.50              | 33        | 0.05 + (1.50 / 1000 × 33) | 0.0995    |
 
 **Tempo total do roteiro (33 peças):**  
 \[
-(0.026 + 0.0515) \times 33 = 2.56\,h = 153.6\,min
+\text{Tempo Total (h)} = 0.119 + 0.0995 = \mathbf{0.2185\,h}
+\]
+\[
+\text{Tempo Total (min)} = 0.2185 \times 60 = \mathbf{13.11\,min}
 \]
 
-> O agente DELPI deve sempre calcular **tempo por peça primeiro**, e só depois multiplicar pela **quantidade solicitada**, garantindo consistência entre o roteiro (SG2010) e a estrutura (SG1010), ambos expressos **por mil peças**.
+> O agente DELPI deve sempre calcular **tempo por peça primeiro**, e só depois multiplicar pela **quantidade solicitada**, garantindo consistência com o roteiro (SG2010).
 
 ---
 
