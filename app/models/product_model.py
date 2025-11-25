@@ -9,3 +9,10 @@ class Product(BaseModel):
     components: Optional[List["Product"]] = []
 
     model_config = ConfigDict(extra="allow")  # ✅ permite colunas adicionais sem erro
+
+class ProductSearchRequest(BaseModel):
+    page: int = 1
+    page_size: int = 50
+    code: Optional[str] = None
+    description: Optional[str] = None
+    group: Optional[str] = None

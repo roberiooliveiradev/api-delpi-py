@@ -10,6 +10,8 @@ import jwt
 from datetime import datetime, timedelta
 from app.config import settings
 
+from app.models.system_model import LoginRequest
+
 router = APIRouter()
 
 @router.get("/tables", summary="Listagem de tabelas com paginação")
@@ -42,14 +44,8 @@ def table(tableName: str):
     except Exception as e:
         log_error(f"Erro ao consultar colunas da tabela {tableName}: {e}")
         return error_response(f"Erro inesperado: {e}")
-    
-# Modelo de entrada
-class LoginRequest(BaseModel):
-    username: str
-    password: str
 
-
-# Usuário fixo para testes (você depois pode trocar para banco)
+# Usuário do banco
 VALID_USER = settings.DB_USER
 VALID_PASS = settings.DB_PASSWORD
 

@@ -7,17 +7,9 @@ from app.utils.logger import log_info, log_error
 from app.repositories.base_repository import BaseRepository
 from pydantic import BaseModel
 from typing import Optional
-
-
-class ProductSearchRequest(BaseModel):
-    page: int = 1
-    page_size: int = 50
-    code: Optional[str] = None
-    description: Optional[str] = None
-    group: Optional[str] = None
+from app.models.product_model import ProductSearchRequest
 
 router = APIRouter()
-
 
 @router.get("/", summary="Listagem de produtos com limite")
 def products(limit: int = Query(50, ge=1, le=200)):
