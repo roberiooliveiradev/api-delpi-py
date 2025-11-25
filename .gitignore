@@ -97,5 +97,8 @@ notebooks/.ipynb_checkpoints/
 
 # ---- 📁 Pasta softwares auxiliares ----
 bin/
+manuais/nohup.out
+logs.txt
+app/nohup.out
 manuais/
 app/querys/
