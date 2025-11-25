@@ -102,13 +102,20 @@ class DataQueryRequest(BaseModel):
     )
 
 class DataQueryRequestOpenAPI(BaseModel):
-    tables: List[str] = Field(..., description="Tabelas ou CTEs")
+    tables: List[str]
     columns: Optional[List[str]] = ["*"]
+    joins: Optional[List[Dict[str, Any]]] = None
+    filters: Optional[Any] = None
     group_by: Optional[List[str]] = None
     aggregates: Optional[Dict[str, str]] = None
     having: Optional[Dict[str, Any]] = None
-    order_by: Optional[List[Dict[str, str]]] = None
+    rollup: Optional[bool] = False
+    cube: Optional[bool] = False
+    auto_aggregate: Optional[bool] = False
+    order_by: Optional[List[Dict[str, Any]]] = None
+    aliases: Optional[Dict[str, str]] = None
     page: Optional[int] = 1
     page_size: Optional[int] = 50
+
 
 DataQueryRequest.model_rebuild()
