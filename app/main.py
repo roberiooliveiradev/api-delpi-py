@@ -6,7 +6,6 @@ from app.config import settings  # Configurações do .env
 from app.routes import product_routes   # Rotas de produtos
 from app.routes import system_routes   # Rotas de produtos
 from app.routes import data_routes  # Rota genérica
-from app.routes import sql_routes  # Rota genérica
 from app.middleware.auth_middleware import jwt_middleware
 from fastapi.middleware import Middleware
 from fastapi.openapi.utils import get_openapi
@@ -93,7 +92,6 @@ def root():
 app.include_router(product_routes.router, prefix="/products", tags=["products"])
 app.include_router(system_routes.router, prefix="/system", tags=["system"])
 app.include_router(data_routes.router, prefix="/data", tags=["data"])
-app.include_router(sql_routes.router, prefix="/sql", tags=["sql"])
 # Execução direta (modo desenvolvimento)
 if __name__ == "__main__":
     import uvicorn
