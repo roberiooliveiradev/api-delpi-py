@@ -1,11 +1,16 @@
-# app/repositories/data_repository.py
 from app.repositories.base_repository import BaseRepository
 from app.utils.logger import log_info, log_error
 import re
+from typing import Dict, Any, List, Tuple, Optional, Set
+
 
 class DataRepository(BaseRepository):
     """
-    Repositório analítico dinâmico — agora com suporte a aliases de tabelas.
+    Repositório para consultas dinâmicas (rota /data/query).
+
+    - Suporta múltiplas CTEs (WITH cte1 AS (...), cte2 AS (...), ...).
+    - Tudo que funciona na consulta principal funciona dentro das CTEs.
+    - CTEs NUNCA paginam.
     """
 
     ALLOWED_OPERATORS = {
@@ -13,222 +18,334 @@ class DataRepository(BaseRepository):
         "LIKE", "NOT LIKE",
         "IN", "NOT IN",
         "BETWEEN",
-        "IS NULL", "IS NOT NULL"
+        "IS NULL", "IS NOT NULL",
     }
+
     ALLOWED_JOIN_TYPES = {"INNER", "LEFT", "RIGHT", "FULL"}
-    SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.()*]+$")
-    ALLOWED_SQL_FUNCTIONS = {"TRIM", "LTRIM", "RTRIM", "UPPER", "LOWER", "LEN", "CAST", "CONVERT"}
+
+    SAFE_IDENTIFIER = re.compile(
+        r"^[A-Za-z0-9_.()\s]+(AS\s+[A-Za-z0-9_]+)?$",
+        re.IGNORECASE,
+    )
+
+    ALLOWED_SQL_FUNCTIONS = {
+        "TRIM", "LTRIM", "RTRIM", "UPPER", "LOWER", "LEN",
+        "CAST", "CONVERT",
+        "SUM", "COUNT", "MIN", "MAX", "AVG",
+    }
+
+    SAFE_KEYS = {
+        "with", "tables", "columns", "joins", "filters",
+        "order_by", "group_by", "aggregates", "having",
+        "rollup", "cube", "auto_aggregate", "aliases",
+        "page", "page_size",
+    }
 
     # ======================================================
-    # 🔹 MÉTODO PRINCIPAL
+    # 🔹 ENTRYPOINT PRINCIPAL
     # ======================================================
     def execute_dynamic_query(self, payload: dict) -> dict:
         try:
-            # ✅ Compatibilidade com Pydantic v1/v2 e dicionários
-            if hasattr(payload, "model_dump"):
-                payload = payload.model_dump(exclude_none=True, by_alias=True)
-            elif hasattr(payload, "dict"):
-                payload = payload.dict(exclude_none=True, by_alias=True)
-            elif not isinstance(payload, dict):
-                raise TypeError("O payload recebido não é um dicionário ou modelo válido.")
+            main_payload = self._sanitize_payload(payload, allow_with=True)
 
-            # 🔹 Normalização
-            tables = payload.get("tables") or []
-            columns = payload.get("columns") or ["*"]
-            joins = payload.get("joins") or []
-            filters = payload.get("filters") or None
-            order_by = payload.get("order_by") or []
-            group_by = payload.get("group_by") or []
-            aggregates = payload.get("aggregates") or {}
-            having = payload.get("having") or {}
-            rollup = payload.get("rollup", False)
-            cube = payload.get("cube", False)
-            auto_aggregate = payload.get("auto_aggregate", False)
-            aliases = payload.get("aliases") or {}
+            with_blocks = main_payload.get("with") or {}
+            with_sql, cte_names = self._build_with_clause(with_blocks)
 
-            # 🔹 Paginação opcional
-            page = payload.get("page")
-            page_size = payload.get("page_size")
+            main_sql, pagination = self._build_select_sql(
+                main_payload, for_cte=False, cte_names=cte_names
+            )
 
-            if not tables:
-                raise ValueError("Informe ao menos uma tabela.")
+            final_sql = with_sql + main_sql
+            log_info(f"[DATA_QUERY] SQL gerado: {final_sql}")
 
-            main_table = tables[0]
-
-            # ======================================================
-            # 🔹 Validação de nomes / aliases
-            # ======================================================
-            for t in tables + columns + group_by + list(aggregates.keys()):
-                if t in ("*",) or t.endswith(".*"):
-                    continue
-                if "(" in t and ")" in t:
-                    func_name = t.split("(")[0].upper()
-                    if func_name not in self.ALLOWED_SQL_FUNCTIONS:
-                        raise ValueError(f"Função SQL não permitida: {func_name}")
-                    continue
-                if not re.match(r"^[A-Za-z0-9_.()\s]+(AS\s+[A-Za-z0-9_]+)?$", t, re.IGNORECASE):
-                    raise ValueError(f"Nome inválido ou alias não permitido: {t}")
-
-            # ======================================================
-            # 🔹 SELECT base
-            # ======================================================
-            select_parts = list(columns)
-            for field, func in aggregates.items():
-                select_parts.append(f"{func.upper()}({field}) AS {func.lower()}_{field.split('.')[-1]}")
-
-            main_table_name, main_alias = self._parse_table_alias(main_table)
-            sql = f"SELECT {', '.join(select_parts)} FROM {main_table_name}"
-            if main_alias:
-                sql += f" AS {main_alias}"
-
-            # ======================================================
-            # 🔹 JOINs
-            # ======================================================
-            for j in joins:
-                join_type = j.get("type", "INNER").upper()
-                if join_type not in self.ALLOWED_JOIN_TYPES:
-                    raise ValueError(f"Tipo de JOIN inválido: {join_type}")
-
-                join_table_name, join_alias = self._parse_table_alias(j.get("table", ""))
-                left, right = j.get("left"), j.get("right")
-
-                sql += f" {join_type} JOIN {join_table_name}"
-                if join_alias:
-                    sql += f" AS {join_alias}"
-                sql += f" ON {left} = {right}"
-
-            # ======================================================
-            # 🔹 WHERE
-            # ======================================================
-            if filters:
-                where_clause = self._build_filter_clause(filters)
-                if where_clause:
-                    sql += f" WHERE {where_clause}"
-
-            # ======================================================
-            # 🔹 GROUP BY / ROLLUP / CUBE
-            # ======================================================
-            if group_by:
-                group_expr = ", ".join(group_by)
-                if rollup:
-                    sql += f" GROUP BY ROLLUP({group_expr})"
-                elif cube:
-                    sql += f" GROUP BY CUBE({group_expr})"
-                else:
-                    sql += f" GROUP BY {group_expr}"
-
-            # ======================================================
-            # 🔹 HAVING
-            # ======================================================
-            if having:
-                having_clauses = []
-                for field, cond in having.items():
-                    op = cond.get("op", "=").upper()
-                    val = cond.get("value")
-                    if op in ("IS NULL", "IS NOT NULL"):
-                        having_clauses.append(f"{field} {op}")
-                    elif op == "BETWEEN":
-                        having_clauses.append(f"{field} BETWEEN '{val[0]}' AND '{val[1]}'")
-                    elif op in ("IN", "NOT IN"):
-                        val_str = ", ".join(f"'{v}'" for v in val)
-                        having_clauses.append(f"{field} {op} ({val_str})")
-                    else:
-                        having_clauses.append(f"{field} {op} '{val}'")
-                sql += " HAVING " + " AND ".join(having_clauses)
-
-            # ======================================================
-            # 🔹 ORDER BY
-            # ======================================================
-            if order_by:
-                order_clause = ", ".join(
-                    f"{ob['field']} {ob.get('direction', 'ASC').upper()}" for ob in order_by
-                )
-            else:
-                order_clause = "R_E_C_N_O_ ASC"
-            sql += f" ORDER BY {order_clause}"
-
-            # ======================================================
-            # 🔹 Paginação condicional
-            # ======================================================
-            if page is not None and page_size is not None:
-                offset = (page - 1) * page_size
-                sql += f" OFFSET {offset} ROWS FETCH NEXT {page_size} ROWS ONLY"
-                pagination_info = {"page": page, "page_size": page_size}
-            else:
-                pagination_info = {"page": None, "page_size": None}
-
-            # ======================================================
-            # 🔹 Execução
-            # ======================================================
-            rows = self.execute_query(sql)
+            rows = self.execute_query(final_sql)
             return {
                 "success": True,
-                "sql": sql,
+                "sql": final_sql,
                 "data": rows,
-                **pagination_info,
+                **pagination,
                 "total": len(rows),
                 "pages": 1,
             }
 
         except Exception as e:
-            log_error(f"Erro na consulta analítica: {e}")
-            return {"success": False, "message": f"500: {e}"}
+            log_error(f"[DATA_QUERY] ERRO: {repr(e)}")
+            return {"success": False, "message": f"{e}"}
 
     # ======================================================
-    # 🔹 CONSTRUÇÃO RECURSIVA DOS FILTROS
+    # 🔹 SANITIZAÇÃO DE PAYLOAD
     # ======================================================
-    def _build_filter_clause(self, filters: dict) -> str:
-        if not filters:
-            return ""
+    def _sanitize_payload(self, payload: Any, allow_with: bool) -> Dict[str, Any]:
+        if hasattr(payload, "model_dump"):
+            payload = payload.model_dump(exclude_none=True, by_alias=True)
+        elif hasattr(payload, "dict"):
+            payload = payload.dict(exclude_none=True, by_alias=True)
 
-        if isinstance(filters, dict):
-            and_key = "and" if "and" in filters else "and_" if "and_" in filters else None
-            or_key = "or" if "or" in filters else "or_" if "or_" in filters else None
+        cleaned = {k: v for k, v in payload.items() if k in self.SAFE_KEYS}
 
-            if and_key:
-                clauses = [self._build_filter_clause(f) for f in filters[and_key] if f]
-                return f"({' AND '.join([c for c in clauses if c])})"
-            if or_key:
-                clauses = [self._build_filter_clause(f) for f in filters[or_key] if f]
-                return f"({' OR '.join([c for c in clauses if c])})"
+        if not allow_with:
+            cleaned.pop("with", None)
 
-            parts = []
-            for field, cond in filters.items():
-                if not isinstance(cond, dict) or "op" not in cond:
-                    continue
-                op = cond.get("op", "=").upper()
+        # Paginação automática segura
+        if cleaned.get("page") is None:
+            cleaned["page"] = 1
+        if cleaned.get("page_size") is None:
+            cleaned["page_size"] = 100
+
+        cleaned.setdefault("aggregates", {})
+        cleaned.setdefault("group_by", [])
+
+        return cleaned
+
+    # ======================================================
+    # 🔹 BLOCO WITH (MÚLTIPLAS CTEs)
+    # ======================================================
+    def _build_with_clause(self, with_blocks: Any) -> Tuple[str, Set[str]]:
+        if not with_blocks:
+            return "", set()
+
+        cte_names: Set[str] = set(with_blocks.keys())
+        cte_clauses: List[str] = []
+
+        for cte_name, cte_payload in with_blocks.items():
+            cte_sql = self._build_cte_sql(cte_payload, cte_names)
+            cte_clauses.append(f"{cte_name} AS ({cte_sql})")
+
+        return f"WITH {', '.join(cte_clauses)} ", cte_names
+
+    # ======================================================
+    # 🔹 CTE builder
+    # ======================================================
+    def _build_cte_sql(self, payload: dict, cte_names: Set[str]) -> str:
+        cleaned = self._sanitize_payload(payload, allow_with=False)
+        cleaned["page"] = None
+        cleaned["page_size"] = None
+        sql, _ = self._build_select_sql(cleaned, for_cte=True, cte_names=cte_names)
+        return sql
+
+    # ======================================================
+    # 🔹 SELECT principal + HAVING fix
+    # ======================================================
+    def _build_select_sql(
+        self, payload: Dict[str, Any], for_cte: bool, cte_names: Set[str]
+    ) -> Tuple[str, Dict[str, Optional[int]]]:
+
+        tables = payload.get("tables") or []
+        columns = payload.get("columns") or ["*"]
+        joins = payload.get("joins") or []
+        filters = payload.get("filters")
+        order_by = payload.get("order_by") or []
+        group_by = payload.get("group_by") or []
+        aggregates = payload.get("aggregates") or {}
+        having = payload.get("having") or {}
+        aliases = payload.get("aliases") or {}
+        rollup = payload.get("rollup", False)
+        cube = payload.get("cube", False)
+        auto_aggregate = payload.get("auto_aggregate", False)
+
+        page = payload.get("page")
+        page_size = payload.get("page_size")
+
+        # Aliases automáticos
+        def apply_alias(table: str) -> str:
+            if " AS " in table.upper():
+                return table
+            if table in aliases:
+                return f"{table} AS {aliases[table]}"
+            return table
+
+        tables = [apply_alias(t) for t in tables]
+
+        # SELECT e agregados
+        select_parts: List[str] = []
+        aggregate_alias_map = {}
+
+        # aplicar auto_aggregate
+        if auto_aggregate and group_by:
+            new_cols = []
+            new_aggs = dict(aggregates)
+            gb = set(group_by)
+
+            for col in columns:
+                if col in gb or col == "*" or "(" in col:
+                    new_cols.append(col)
+                else:
+                    if col not in new_aggs:
+                        new_aggs[col] = "SUM"
+
+            columns = new_cols
+            aggregates = new_aggs
+
+        # Monta colunas simples
+        select_parts.extend(columns)
+
+        # Monta agregados
+        for f, func in aggregates.items():
+            alias = f.split(".")[-1]
+            alias = f"{func.lower()}_{alias}"
+
+            aggregate_alias_map[alias] = f"{func.upper()}({f})"
+            select_parts.append(f"{func.upper()}({f}) AS {alias}")
+
+        # FROM principal
+        main_table = tables[0]
+        main_name, main_alias = self._parse_table_alias(main_table)
+
+        sql = f"SELECT {', '.join(select_parts)} FROM {main_name}"
+        if main_alias:
+            sql += f" AS {main_alias}"
+
+        # tabelas adicionais
+        for t in tables[1:]:
+            tn, ta = self._parse_table_alias(t)
+            sql += f", {tn}"
+            if ta:
+                sql += f" AS {ta}"
+
+        # JOINs com condições complexas
+        for j in joins:
+            sql += f" {self._build_join_clause(j, aliases)}"
+
+        # WHERE
+        if filters:
+            wc = self._build_filter_clause(filters)
+            if wc:
+                sql += f" WHERE {wc}"
+
+        # GROUP BY
+        if group_by:
+            gb_expr = ", ".join(group_by)
+            if rollup:
+                sql += f" GROUP BY ROLLUP({gb_expr})"
+            elif cube:
+                sql += f" GROUP BY CUBE({gb_expr})"
+            else:
+                sql += f" GROUP BY {gb_expr}"
+
+        # HAVING fix (usando funções reais)
+        if having:
+            h_parts = []
+            for field, cond in having.items():
+                if field in aggregate_alias_map:
+                    field_expr = aggregate_alias_map[field]
+                else:
+                    field_expr = field
+
+                op = cond.get("op").upper()
                 val = cond.get("value")
 
-                if op not in self.ALLOWED_OPERATORS:
-                    raise ValueError(f"Operador não permitido: {op}")
-
                 if op in ("IS NULL", "IS NOT NULL"):
-                    parts.append(f"{field} {op}")
-                elif op in ("IN", "NOT IN"):
-                    val_str = ", ".join(f"'{v}'" for v in val)
-                    parts.append(f"{field} {op} ({val_str})")
-                elif op == "BETWEEN":
-                    if not isinstance(val, list) or len(val) != 2:
-                        raise ValueError("BETWEEN requer [min, max]")
-                    parts.append(f"{field} BETWEEN '{val[0]}' AND '{val[1]}'")
+                    h_parts.append(f"{field_expr} {op}")
                 else:
-                    parts.append(f"{field} {op} '{val}'")
-            return " AND ".join(parts)
+                    h_parts.append(f"{field_expr} {op} '{val}'")
 
-        if isinstance(filters, list):
-            return " AND ".join([c for c in [self._build_filter_clause(f) for f in filters] if c])
+            sql += " HAVING " + " AND ".join(h_parts)
+
+        # ORDER BY
+        if order_by:
+            orders = [
+                f"{ob['field']} {ob.get('direction','ASC').upper()}" for ob in order_by
+            ]
+            sql += " ORDER BY " + ", ".join(orders)
+        else:
+            # sem ORDER BY → paginação desabilitada
+            page = None
+            page_size = None
+
+        # PAGINAÇÃO SEGURA
+        if (not for_cte) and page and page_size and order_by:
+            offset = (page - 1) * page_size
+            sql += f" OFFSET {offset} ROWS FETCH NEXT {page_size} ROWS ONLY"
+            return sql, {"page": page, "page_size": page_size}
+
+        return sql, {"page": None, "page_size": None}
+
+    # ======================================================
+    # 🔹 JOIN builder com field-to-field
+    # ======================================================
+    def _build_join_clause(self, j: dict) -> str:
+        if hasattr(j, "model_dump"):
+            j = j.model_dump(exclude_none=True, by_alias=True)
+
+        jt = j.get("type", "INNER").upper()
+        table = j.get("table")
+
+        tn, ta = self._parse_table_alias(table)
+        sql = f"{jt} JOIN {tn}"
+        if ta:
+            sql += f" AS {ta}"
+
+        # JOIN simples
+        if "left" in j:
+            return sql + f" ON {j['left']} = {j['right']}"
+
+        # JOIN complexo
+        conds = j.get("conditions") or [j["on"]]
+        on_parts = []
+        for c in conds:
+            left = c["left"]
+            op = c["op"].upper()
+            right = c["right"]
+
+            field_ops = {
+                "=FIELD": "=",
+                "<>FIELD": "<>",
+                ">FIELD": ">",
+                "<FIELD": "<",
+                ">=FIELD": ">=",
+                "<=FIELD": "<=",
+            }
+
+            if op in field_ops:
+                on_parts.append(f"{left} {field_ops[op]} {right}")
+            else:
+                on_parts.append(f"{left} {op} '{right}'")
+
+        return sql + " ON " + " AND ".join(on_parts)
+
+    # ======================================================
+    # 🔹 FILTROS
+    # ======================================================
+    def _build_filter_clause(self, filters: Any) -> str:
+        if hasattr(filters, "model_dump"):
+            filters = filters.model_dump(exclude_none=True, by_alias=True)
+
+        if isinstance(filters, dict):
+            if "and" in filters:
+                parts = [self._build_filter_clause(f) for f in filters["and"]]
+                return "(" + " AND ".join(p for p in parts if p) + ")"
+
+            if "or" in filters:
+                parts = [self._build_filter_clause(f) for f in filters["or"]]
+                return "(" + " OR ".join(p for p in parts if p) + ")"
+
+            # filtro simples
+            for field, cond in filters.items():
+                op = cond["op"].upper()
+                val = cond["value"]
+
+                field_ops = {
+                    "=FIELD": "=",
+                    "<>FIELD": "<>",
+                    ">FIELD": ">",
+                    "<FIELD": "<",
+                    ">=FIELD": ">=",
+                    "<=FIELD": "<=",
+                }
+
+                if op in field_ops:
+                    return f"{field} {field_ops[op]} {val}"
+                else:
+                    return f"{field} {op} '{val}'"
+
         return ""
 
     # ======================================================
-    # 🔹 SUPORTE A ALIAS
+    # 🔹 alias helper
     # ======================================================
-    def _parse_table_alias(self, table_name: str) -> tuple[str, str | None]:
-        """
-        Retorna (tabela, alias) a partir de 'SB1010 AS P' ou 'SB1010 P'.
-        """
-        if not table_name:
-            return "", None
-        parts = re.split(r"\s+AS\s+|\s+", table_name.strip(), flags=re.IGNORECASE)
-        if len(parts) == 2:
-            return parts[0], parts[1]
-        return table_name.strip(), None
+    def _parse_table_alias(self, table: str) -> Tuple[str,Optional[str]]:
+        if " AS " in table.upper():
+            t, a = re.split(r"\s+AS\s+", table, flags=re.IGNORECASE)
+            return t.strip(), a.strip()
+        parts = table.split()
+        return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], None)
