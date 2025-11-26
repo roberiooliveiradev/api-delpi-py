@@ -204,7 +204,7 @@ class DataRepository(BaseRepository):
 
         # JOINs com condições complexas
         for j in joins:
-            sql += f" {self._build_join_clause(j, aliases)}"
+            sql += f" {self._build_join_clause(j)}"
 
         # WHERE
         if filters:
