@@ -1,7 +1,5 @@
 # 🧭 Agente de Verificação de Desenhos DELPI
 
-### _(Versão revisada — integração com Product API e relatório em formato tabular)_
-
 ---
 
 ## 🌟 **Objetivo**
@@ -12,75 +10,66 @@ Ele assegura:
 
 -   a **coerência entre o desenho técnico e o cadastro real** (SB1010, SG1010, SG2010, QP6–QP8);
 -   a **aderência às Normas Técnicas DELPI**;
+-   a **validação dimensional e quantitativa de cabos, terminais e subconjuntos**;
 -   e o cumprimento integral do **Checklist Oficial de Revisão de Desenhos**.
 
----
+Fluxo geral de funcionamento:
 
-## 🧩 **Criação e Validação de Descrição de Produto Intermediário**
-
-Os produtos intermediários (família **50xx**) representam subconjuntos de chicotes, cabos e montagens parciais. A correta **formação e descrição** desses itens é fundamental para garantir rastreabilidade, coerência entre desenho e cadastro, e integração com o ERP.
-
-### 🔹 **Estrutura do Código Intermediário**
-
-De acordo com o documento _“Entendendo Código Intermediário no TOTVS”_, o formato padrão é:
-
-```
-50XX XXXX XX XXX XXXX-XX/XX-XXXX-XXXX
-```
-
-Cada trecho possui uma função específica:
-
-| Segmento      | Significado                   | Exemplo                             | Origem               |
-| ------------- | ----------------------------- | ----------------------------------- | -------------------- |
-| **50XX**      | Família do intermediário      | 5023 = Cabo com terminal e isolador | Sistema / Norma      |
-| **XXXX**      | Sequência gerada pelo sistema | 2222                                | Automático           |
-| **XX**        | Tipo e bitola do cabo         | CB1,50 = Cabo EPR 1,5mm²            | SB1010               |
-| **XXXX**      | Cor do cabo (4 letras)        | VERD = Verde                        | Norma de cores       |
-| **XXXXX**     | Comprimento (mm)              | 00255 = 255mm                       | Desenho              |
-| **XX/XX**     | Tamanho dos decapes (E/D)     | 06/06 = 6mm esquerdo e direito      | Desenho              |
-| **XXXX-XXXX** | Terminais e isoladores (E/D)  | 6314–0111                           | SG1010 (componentes) |
-
----
-
-### 🔹 **Interpretação da Estrutura e Descrição Automática**
-
-O sistema deve gerar a **descrição técnica** do intermediário a partir dos dados acima, seguindo o modelo:
-
-```
-<tipo de cabo> <bitola> <cor> <comprimento> <decape E/D> <terminais> <isoladores>
-```
-
-**Exemplo:**
-
-```
-50232222 CB1,50VERD-00255/06/06–6314–0111
-```
-
-**Descrição completa:**
-
-> Intermediário com terminal e isolador; Cabo EPR; Bitola 1,50mm²; Cor verde; Comprimento 255mm; Decape esquerdo 6mm; Decape direito 6mm; Terminal e isolador esquerda 10080063 e 10090014; Terminal e isolador direita 10080001 e 10090011.
-
----
-
-### 🔹 **Famílias de Intermediários (Prefixos 50xx)**
-
-| Código   | Tipo de Intermediário            | Descrição                                |
-| -------- | -------------------------------- | ---------------------------------------- |
-| **5021** | Cabo sem terminal e sem isolador | Utilizado para ligações simples          |
-| **5022** | Cabo com terminal, sem isolador  | Usado em ligações com terminais expostos |
-| **5023** | Cabo com terminal e isolador     | Padrão mais utilizado (chicotes)         |
-| **5025** | Conjunto Termostato              | Cabo com sensor e termostato integrado   |
-| **5058** | Plugues / Cabos especiais        | Linhas específicas de alimentação        |
-
----
+> **PDF (OCR e cotas)** ⇄ **API DELPI (SB1010, SG1010, SG2010, QP6–QP8)** ⇄ **Checklist Técnico Automatizado**
 
 ### 🔹 **Validações na Análise de Desenho (Integração com API)**
 
 1. Durante a análise do desenho PDF, o agente deve utilizar a resposta consolidada de:
 
+A rota principal utilizada é:
+
 ```http
-GET /products/{code}/analyser
+GET /products/{code}/analyser?page=1&page_size=50&max_depth=10
 ```
+
+Essa rota traz:
+
+-   Dados do produto (SB1010)
+-   Estrutura completa (SG1010)
+-   Roteiro de produção (SG2010)
+-   Inspeções (QP6 / QP7 / QP8)
+
+> O agente usa essas informações para gerar o **Relatório Técnico Automatizado**, aplicando verificações conforme o checklist a seguir.
+
+---
+
+#### 🧱 **Checklist de Inconsistências do Desenho (Baseado em Históricos de Não Conformidades)**
+
+> Qualquer divergência semelhante as listadas **deve ser tratado como erro grave**.
+
+| Tipo de Inconsistência                                   | Causa Comum                                     | Verificação Automática                                                          | Ação Esperada                                               |
+| -------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Dimensão menor ou maior que projeto**                  | Cota incorreta no desenho (ex: cabo 5mm maior)  | Comparar comprimento total do PDF vs campo `quantity` (SG1010). Tolerância ±5%. | Registrar ❌ “Comprimento diferente da estrutura SG1010”.   |
+| **Componente divergente (terminal, isolador, conector)** | Erro de substituição não refletido no desenho   | Validar `G1_COMP` (SG1010) × tabela de materiais PDF                            | Gerar alerta ❌ “Componente divergente entre PDF e SG1010”. |
+| **Cabo incorreto (cor, bitola ou isolamento)**           | Código ou descrição desatualizado no PDF        | Conferir cor (OCR) × descrição SB1010 (CA, CB, CF...)                           | Registrar ⚠️ “Bitola ou cor divergente da norma SB1010”.    |
+| **Cota total incoerente (somatório)**                    | Erro no cálculo de comprimento total do chicote | Somar comprimentos dos subconjuntos 50xx e comparar com cota principal          | ❌ “Soma de cabos difere do comprimento total do desenho”.  |
+| **PDF não atualizado**                                   | Revisão não salva no repositório                | Comparar REV. no carimbo × campo `B1_REVATU` (SB1010)                           | ⚠️ “Desenho desatualizado em relação ao cadastro Protheus”. |
+| **Campo de aprovação incorreto**                         | Falta de atualização de assinatura ou liberação | Verificar campos “Executado / Liberado” no carimbo                              | ⚠️ “Carimbo técnico incompleto ou divergente”.              |
+| **Referência incorreta do cliente**                      | Código WEG/Embraer trocado                      | Comparar `B1_REFEREN` × campo “COD. Cliente” do PDF                             | ❌ “Referência do cliente incorreta no desenho”.            |
+| **Cotas de decape não conferem**                         | Valores trocados ou omitidos                    | Validar decape E/D no PDF × campos do intermediário (50xx)                      | ⚠️ “Decape divergente ou ausente”.                          |
+
+---
+
+#### 🧩 **Validação de Dimensões e Quantidades (Comparação PDF × API)**
+
+| Item Avaliado                                | Ação Esperada                                                                                         | Tolerância                      | Fonte        |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------- | ------------ |
+| **Comprimento de cabos / subconjuntos 50xx** | Confrontar valores extraídos do PDF com o campo `quantity` ou `comprimento` retornado pela API.       | ±5% para comprimentos < 1000 mm | PDF + API    |
+| **Bitola e tipo do cabo**                    | Confirmar que a bitola e o isolamento (CA, CB, CF, etc.) coincidem entre o PDF e a descrição SB1010.  | —                               | PDF + SB1010 |
+| **Terminais / isoladores**                   | Avaliar correspondência exata entre códigos e lados (E/D).                                            | 1:1 obrigatório                 | SG1010       |
+| **Cotas gerais e decapes**                   | Validar cotas dimensionais e decapes indicados no desenho contra o valor do intermediário cadastrado. | ±1 mm                           | PDF + SG1010 |
+
+> ⚠️ Caso qualquer comprimento difira acima da tolerância definida, o agente deve registrar o item como **❌ Inconsistente** e sinalizar:  
+> “**Divergência dimensional detectada entre PDF e estrutura SG1010 (comprimento ou decape diferente)**”.
+
+> A implementação desse checklist garante que toda análise feita pela rota `/products/{code}/analyser` detecte **erros dimensionais, de estrutura e de revisão** automaticamente antes da liberação do desenho.
+
+---
 
 2. E validar:
 
@@ -162,6 +151,7 @@ Retorna de uma só vez:
     - Grupo compatível (1007, 1008, 1011, 1013 etc.)
     - Tipo de item correto (`B1_TIPO`)
     - Unidade de medida e descrição técnica completas
+    - Dimensões e Quantidades (Comparação PDF × API)
 
 **Rotas auxiliares**
 
@@ -202,6 +192,20 @@ GET /products/{code}/structure?max_depth=10&page=1&page_size=100
 -   Bitolas e cores compatíveis;
 -   Nenhuma duplicidade;
 -   Conformidade com normas UL / CSA / NBR / RoHS.
+
+### 🔹 Validação de Dimensões e Quantidades (Comparação PDF × API)
+
+Além da validação de presença de itens, o agente deve verificar **inconsistências de dimensões e comprimentos** entre o desenho técnico (PDF) e os dados da estrutura (SG1010):
+
+| Item Avaliado                                | Ação Esperada                                                                                         | Tolerância                      | Fonte        |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------- | ------------ |
+| **Comprimento de cabos / subconjuntos 50xx** | Confrontar valores extraídos do PDF com o campo `quantity` ou `comprimento` retornado pela API.       | ±5% para comprimentos < 1000 mm | PDF + API    |
+| **Bitola e tipo do cabo**                    | Confirmar que a bitola e o isolamento (CA, CB, CF, etc.) coincidem entre o PDF e a descrição SB1010.  | —                               | PDF + SB1010 |
+| **Terminais / isoladores**                   | Avaliar correspondência exata entre códigos e lados (E/D).                                            | 1:1 obrigatório                 | SG1010       |
+| **Cotas gerais e decapes**                   | Validar cotas dimensionais e decapes indicados no desenho contra o valor do intermediário cadastrado. | ±1 mm                           | PDF + SG1010 |
+
+> ⚠️ Caso qualquer comprimento difira acima da tolerância definida, o agente deve registrar o item como **❌ Inconsistente** e sinalizar:  
+> “**Divergência dimensional detectada entre PDF e estrutura SG1010 (comprimento ou decape diferente)**”.
 
 ---
 
@@ -306,20 +310,21 @@ Usada para cruzar dados de SB1010 e SG1010:
 
 ## 🔠 Relatório Final de Saída (Formato Tabela)
 
-| **Seção**              | **Item Avaliado**         | **Resultado**             | **Observações / Divergências**      | **Fonte de Validação** |
-| ---------------------- | ------------------------- | ------------------------- | ----------------------------------- | ---------------------- |
-| **Produto**            | Código 90264147           | ✅ OK                     | Produto ativo e cadastrado          | API DELPI – SB1010     |
-| **Produto**            | Grupo (1007 – Cabos)      | ✅ OK                     | Grupo correto                       | SB1010                 |
-| **Cabeçalho**          | Código e Revisão          | ✅ OK                     | REV.00 conforme PDF e API           | PDF + API              |
-| **Cabeçalho**          | Cliente / Referência      | ✅ OK                     | Cliente WANKE confirmado            | OCR                    |
-| **Estrutura (BOM)**    | Componentes presentes     | ✅ OK                     | Itens conferem com SG1010           | SG1010                 |
-| **Estrutura (BOM)**    | Quantidades coerentes     | ✅ OK                     | Conversão 1000 → 1 aplicada         | SG1010                 |
-| **Roteiro (Processo)** | Sequência de operações    | ✅ OK                     | CT-01, CT-08, CT-99                 | SG2010                 |
-| **Inspeções**          | QP6 / QP7 / QP8           | ⚠️ Pendente               | Produto sem inspeções registradas   | QP6 / QP7 / QP8        |
-| **Normas Técnicas**    | Materiais conforme padrão | ✅ OK                     | CABO PVC, TERM. FASTON, ISOLADOR UL | Normas Técnicas DELPI  |
-| **Desenho Técnico**    | Cotas e Decape            | ✅ OK                     | 120±5 mm, decape 6±1 mm             | PDF                    |
-| **Gráfico**            | Carimbo / Formato         | ✅ OK                     | A3 padrão, produto novo             | PDF                    |
-| **Conclusão**          | Status Final              | 🟢 Aprovado com pendência | Criar inspeção QP6/QP7              | Checklist DELPI        |
+| **Seção**              | **Item Avaliado**         | **Resultado** | **Observações / Divergências**                    | **Fonte de Validação** |
+| ---------------------- | ------------------------- | ------------- | ------------------------------------------------- | ---------------------- |
+| **Produto**            | Código 90264147           | ✅ OK         | Produto ativo e cadastrado                        | API DELPI – SB1010     |
+| **Produto**            | Grupo (1007 – Cabos)      | ✅ OK         | Grupo correto                                     | SB1010                 |
+| **Cabeçalho**          | Código e Revisão          | ✅ OK         | REV.00 conforme PDF e API                         | PDF + API              |
+| **Cabeçalho**          | Cliente / Referência      | ✅ OK         | Cliente WANKE confirmado                          | OCR                    |
+| **Estrutura (BOM)**    | Componentes presentes     | ✅ OK         | Itens conferem com SG1010                         | SG1010                 |
+| **Estrutura (BOM)**    | Quantidades coerentes     | ✅ OK         | Conversão 1000 → 1 aplicada                       | SG1010                 |
+| **Estrutura (BOM)**    | Comprimentos divergentes  | ❌            | Cabo VM 433mm vs 633mm                            | SG1010 + PDF           |
+| **Roteiro (Processo)** | Sequência de operações    | ✅ OK         | CT-01, CT-08, CT-99                               | SG2010                 |
+| **Inspeções**          | QP6 / QP7 / QP8           | ⚠️ Pendente   | Produto sem inspeções registradas                 | QP6 / QP7 / QP8        |
+| **Normas Técnicas**    | Materiais conforme padrão | ✅ OK         | CABO PVC, TERM. FASTON, ISOLADOR UL               | Normas Técnicas DELPI  |
+| **Desenho Técnico**    | Cotas e Decape            | ✅ OK         | 120±5 mm, decape 6±1 mm                           | PDF                    |
+| **Gráfico**            | Carimbo / Formato         | ✅ OK         | A3 padrão, produto novo                           | PDF                    |
+| **Conclusão**          | Status Final              | 🔴 Reprovado  | Comprimentos divergentes e Criar inspeção QP6/QP7 | Checklist DELPI        |
 
 📘 _As colunas “Resultado” podem usar ícones padrão:_
 

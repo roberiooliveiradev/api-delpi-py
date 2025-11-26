@@ -5,12 +5,12 @@ from app.models.product_model import Product
 from app.utils.logger import log_info, log_error
 from app.core.exceptions import BusinessLogicError, DatabaseConnectionError
 
-def get_table(tableName: str) -> dict:
+def get_columns_table(tableName: str) -> dict:
     """
-    Busca uma tabela no Protheus via repositório.
+    Busca as colunas de tabela no Protheus via repositório.
     """
     repo = SystemRepository()
-    log_info(f"Iniciando consulta a tabela {tableName} via repositório")
+    log_info(f"Iniciando consulta as colunas da tabela {tableName} via repositório")
     try:
         result = repo.get_columns_table(tableName)
         return result
@@ -21,6 +21,21 @@ def get_table(tableName: str) -> dict:
         log_error(f"Erro inesperado ao buscar tabela {tableName}: {e}")
         raise DatabaseConnectionError(str(e))
 
+def get_table(tableName: str) ->dict:
+    """
+    Busca uma tabela no Protheus via repositório.
+    """
+    repo = SystemRepository()
+    log_info(f"Iniciando consulta a tabela {tableName} via repositório")
+    try:
+        result = repo.get_table(tableName)
+        return result
+    except BusinessLogicError as e:
+        log_error(str(e))
+        raise
+    except Exception as e:
+        log_error(f"Erro inesperado ao buscar tabela {tableName}: {e}")
+        raise DatabaseConnectionError(str(e))
 
 def get_tables(page: int = 1, limit: int = 10) -> list[dict]:
     """
@@ -38,4 +53,35 @@ def get_tables(page: int = 1, limit: int = 10) -> list[dict]:
         }
     except Exception as e:
         log_error(f"Erro ao listar tabelas: {e}")
+        raise DatabaseConnectionError(str(e))
+
+def search_table_by_description(description: str, page: int = 1, limit: int = 20) -> dict:
+    """
+    Busca tabelas no Protheus pela descrição (X2_NOME), 
+    com suporte a múltiplas palavras, variações de LIKE e paginação.
+    """
+    repo = SystemRepository()
+    log_info(f"Buscando tabelas com descrição semelhante a '{description}' (página {page}, limite {limit})")
+
+    try:
+        result = repo.search_table_for_description(description, page, limit)
+
+        if not result or not result.get("data"):
+            raise BusinessLogicError(f"Nenhuma tabela encontrada para '{description}'.")
+
+        return {
+            "success": True,
+            "message": f"{len(result['data'])} resultados encontrados para '{description}'",
+            "page": result.get("page", page),
+            "page_size": result.get("page_size", limit),
+            "total_records": result.get("total_records", 0),
+            "total_pages": result.get("total_pages", 1),
+            "results": result["data"]
+        }
+
+    except BusinessLogicError as e:
+        log_error(f"Nenhuma tabela encontrada: {e}")
+        raise
+    except Exception as e:
+        log_error(f"Erro inesperado ao buscar descrição '{description}': {e}")
         raise DatabaseConnectionError(str(e))
