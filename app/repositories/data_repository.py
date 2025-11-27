@@ -322,7 +322,7 @@ class DataRepository(BaseRepository):
             # filtro simples
             for field, cond in filters.items():
                 op = cond["op"].upper()
-                val = cond["value"]
+                val = cond.get("value")
 
                 field_ops = {
                     "=FIELD": "=",
@@ -335,6 +335,8 @@ class DataRepository(BaseRepository):
 
                 if op in field_ops:
                     return f"{field} {field_ops[op]} {val}"
+                elif op in ("IS NULL", "IS NOT NULL"):
+                    return f"{field} {op}"
                 else:
                     return f"{field} {op} '{val}'"
 
