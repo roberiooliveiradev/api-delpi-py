@@ -62,54 +62,50 @@ class ProductRepository(BaseRepository):
         pattern = "%".join(terms) if len(terms) > 1 else desc_clean
 
         # =====================================================
-        # WHERE otimizado
+        # WHERE otimizado + case/acento insensitive
         # =====================================================
         where_clauses = ["SB1.D_E_L_E_T_ = ''"]
         where_params = []
 
         # 1) Padrão composto (somente se houver mais de um termo)
         if len(terms) > 1:
-            where_clauses.append("SB1.B1_DESC LIKE ?")
+            where_clauses.append("SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?")
             where_params.append(f"%{pattern}%")
 
-        # 2) Todos os termos como AND
-        # Isso garante que CABO + PP + PT apareçam na descrição
+        # 2) Todos os termos (AND)
         for t in terms:
-            where_clauses.append("SB1.B1_DESC LIKE ?")
+            where_clauses.append("SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?")
             where_params.append(f"%{t}%")
 
         where_sql = " AND ".join(where_clauses)
 
         # =====================================================
-        # SCORE (Ranking otimizado)
+        # SCORE (Ranking otimizado + case-insensitive)
         # =====================================================
         score_parts = []
         score_params = []
 
-        # 1) Frase completa (ajuda ranking, não é filtro obrigatório)
-        score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+        # 1) Frase completa
+        score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 50 ELSE 0 END")
         score_params.append(f"%{desc_clean}%")
 
         if len(terms) > 1:
             # 2) Padrão composto — CABO%PP%PT
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 40 ELSE 0 END")
+            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 40 ELSE 0 END")
             score_params.append(f"%{pattern}%")
 
-            # 3) Pesos individuais por termo
+            # 3) Pesos individuais
             for t in terms:
-                # começa a frase
-                score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 25 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 25 ELSE 0 END")
                 score_params.append(f"{t} %")
 
-                # termo iniciando palavra interna
-                score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 15 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 15 ELSE 0 END")
                 score_params.append(f"% {t} %")
 
-                # termo presente em qualquer lugar
-                score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 5 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 5 ELSE 0 END")
                 score_params.append(f"%{t}%")
 
-            # 4) Similaridade por tamanho
+            # Similaridade normalizada
             score_parts.append(
                 f"""
                 CAST(
@@ -130,19 +126,16 @@ class ProductRepository(BaseRepository):
             )
 
         else:
-            # Caso apenas um termo
+            # Caso apenas 1 termo
             term = terms[0]
 
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
-            score_params.append(f"%{desc_clean}%")
-
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 30 ELSE 0 END")
+            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 30 ELSE 0 END")
             score_params.append(f"{term} %")
 
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 20 ELSE 0 END")
+            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 20 ELSE 0 END")
             score_params.append(f"% {term} %")
 
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 10 ELSE 0 END")
+            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 10 ELSE 0 END")
             score_params.append(f"%{term}%")
 
             score_parts.append(
