@@ -176,8 +176,9 @@ class ProductRepository(BaseRepository):
             SELECT 
                 SB1.B1_COD,
                 SB1.B1_DESC,
-                SB1.B1_TIPO,
                 SB1.B1_GRUPO,
+                SB1.B1_TIPO,
+                SB1.B1_UM,
                 SB1.B1_ATIVO,
                 ({score_sql}) AS relevance_score
             FROM SB1010 AS SB1
@@ -218,9 +219,9 @@ class ProductRepository(BaseRepository):
 
         offset = (page - 1) * page_size
 
-        # ============================
-        # WHERE FILTERS
-        # ============================
+        # ============================================================
+        # 🔹 WHERE BASE
+        # ============================================================
         where_clauses = ["SB1.D_E_L_E_T_ = ''"]
         where_params: list[str] = []
 
@@ -228,28 +229,51 @@ class ProductRepository(BaseRepository):
             where_clauses.append("SB1.B1_COD LIKE ?")
             where_params.append(f"%{code}%")
 
-        terms: list[str] = []
-        desc_clean: Optional[str] = None
+        # ============================================================
+        # 🔹 DESCRIÇÃO (mesma lógica do search_by_description)
+        # ============================================================
+        terms = []
+        desc_clean = None
         desc_length = 0
 
         if description:
             desc_clean = description.strip()
-            desc_length = len(desc_clean)
             terms = [t.strip() for t in desc_clean.split() if t.strip()]
+            desc_length = len(desc_clean)
 
-            desc_conditions: list[str] = []
+            pattern = "%".join(terms) if len(terms) > 1 else desc_clean
 
-            desc_conditions.append("SB1.B1_DESC LIKE ?")
+            #
+            # ATENÇÃO: lógica corrigida
+            #
+            # Antes: tudo era AND → isso mata qualquer pesquisa
+            # Agora: agrupamos corretamente em (A OR B OR C)
+            #
+            phrase_match = "SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?"
             where_params.append(f"%{desc_clean}%")
 
-            if terms:
-                t_clauses: list[str] = []
-                for t in terms:
-                    t_clauses.append("SB1.B1_DESC LIKE ?")
-                    where_params.append(f"%{t}%")
-                desc_conditions.append("(" + " OR ".join(t_clauses) + ")")
+            # todos os termos (AND)
+            term_clauses = []
+            for t in terms:
+                term_clauses.append("SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?")
+                where_params.append(f"%{t}%")
 
-            where_clauses.append("(" + " OR ".join(desc_conditions) + ")")
+            all_terms_match = "(" + " AND ".join(term_clauses) + ")"
+
+            # padrão composto (opcional, não obrigatório)
+            pattern_match = "SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?"
+            where_params.append(f"%{pattern}%")
+
+            #
+            # FINAL: a descrição agora funciona corretamente
+            #
+            where_clauses.append(
+                "("
+                f"{phrase_match} OR "
+                f"{all_terms_match} OR "
+                f"{pattern_match}"
+                ")"
+            )
 
         if group:
             where_clauses.append("SB1.B1_GRUPO = ?")
@@ -257,9 +281,9 @@ class ProductRepository(BaseRepository):
 
         where_sql = " AND ".join(where_clauses)
 
-        # ============================
-        # COUNT
-        # ============================
+        # ============================================================
+        # 🔹 COUNT
+        # ============================================================
         count_sql = f"""
             SELECT COUNT(*) AS total
             FROM SB1010 AS SB1
@@ -267,34 +291,38 @@ class ProductRepository(BaseRepository):
         """
         total_rows = int(self.execute_one(count_sql, tuple(where_params))["total"] or 0)
 
-        # ============================
-        # SCORE (Ranking)
-        # ============================
-        score_parts: list[str] = []
-        score_params: list[str] = []
+        # ============================================================
+        # 🔹 SCORE (mesma lógica do search_by_description)
+        # ============================================================
+        score_parts = []
+        score_params = []
 
-        enable_score = description and desc_clean and len(terms) > 1
+        enable_score = bool(description and terms)
 
         if enable_score:
-            # 1. Frase completa
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+
+            # 1) Frase inteira
+            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 50 ELSE 0 END")
             score_params.append(f"%{desc_clean}%")
 
-            for t in terms:
+            # 2) Padrão composto
+            if len(terms) > 1:
+                pattern = "%".join(terms)
+                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 40 ELSE 0 END")
+                score_params.append(f"%{pattern}%")
 
-                # termo no início da descrição
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE ? THEN 25 ELSE 0 END")
+            # 3) Pesos por termo
+            for t in terms:
+                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 25 ELSE 0 END")
                 score_params.append(f"{t} %")
 
-                # termo iniciando uma palavra mais à frente
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE ? THEN 15 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 15 ELSE 0 END")
                 score_params.append(f"% {t} %")
 
-                # termo presente em qualquer lugar
-                score_parts.append(f"CASE WHEN SB1.B1_DESC LIKE ? THEN 5 ELSE 0 END")
+                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 5 ELSE 0 END")
                 score_params.append(f"%{t}%")
 
-            # Similaridade normalizada da frase inteira
+            # 4) Similaridade (normalização por tamanho)
             score_parts.append(
                 f"""
                 CAST(
@@ -314,15 +342,19 @@ class ProductRepository(BaseRepository):
                 """
             )
 
-
         score_sql = " + ".join(score_parts) if enable_score else "0"
 
-        # ============================
-        # FINAL QUERY
-        # ============================
+        # ============================================================
+        # 🔹 RESULT QUERY
+        # ============================================================
         final_sql = f"""
             SELECT 
-                SB1.*,
+                SB1.B1_COD,
+                SB1.B1_DESC,
+                SB1.B1_GRUPO,
+                SB1.B1_TIPO,
+                SB1.B1_ATIVO,
+                SB1.B1_UM,
                 ({score_sql}) AS relevance_score
             FROM SB1010 AS SB1
             WHERE {where_sql}
@@ -330,10 +362,11 @@ class ProductRepository(BaseRepository):
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        if enable_score:
-            final_params = score_params + where_params + [offset, page_size]
-        else:
-            final_params = where_params + [offset, page_size]
+        final_params = (
+            score_params + where_params + [offset, page_size]
+            if enable_score else
+            where_params + [offset, page_size]
+        )
 
         rows = self.execute_query(final_sql, tuple(final_params))
 
@@ -351,6 +384,7 @@ class ProductRepository(BaseRepository):
             "params": final_params,
             "data": rows
         }
+
 
     # -------------------------------
     # 🔹 STRUCTURE (BOM)
