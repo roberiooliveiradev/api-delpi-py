@@ -51,103 +51,65 @@ class ProductRepository(BaseRepository):
 
         offset = (page - 1) * page_size
 
+        # ------------------------------
+        # Preparação
+        # ------------------------------
         desc_clean = description.strip()
         terms = [t.strip() for t in desc_clean.split() if t.strip()]
         desc_length = len(desc_clean)
 
+        # Padrao composto: CABO%PP%PT
+        pattern = "%".join(terms) if len(terms) > 1 else desc_clean
+
         # =====================================================
-        # WHERE
+        # WHERE otimizado
         # =====================================================
         where_clauses = ["SB1.D_E_L_E_T_ = ''"]
         where_params = []
 
-        # Sempre busca frase completa
-        where_clauses.append("SB1.B1_DESC LIKE ?")
-        where_params.append(f"%{desc_clean}%")
-
-        # Termos separados (somente se mais de uma palavra)
+        # 1) Padrão composto (somente se houver mais de um termo)
         if len(terms) > 1:
-            term_clauses = []
-            for t in terms:
-                term_clauses.append("SB1.B1_DESC LIKE ?")
-                where_params.append(f"%{t}%")
-            where_clauses.append("(" + " OR ".join(term_clauses) + ")")
+            where_clauses.append("SB1.B1_DESC LIKE ?")
+            where_params.append(f"%{pattern}%")
+
+        # 2) Todos os termos como AND
+        # Isso garante que CABO + PP + PT apareçam na descrição
+        for t in terms:
+            where_clauses.append("SB1.B1_DESC LIKE ?")
+            where_params.append(f"%{t}%")
 
         where_sql = " AND ".join(where_clauses)
 
         # =====================================================
-        # SCORE (RANKING)
+        # SCORE (Ranking otimizado)
         # =====================================================
         score_parts = []
         score_params = []
 
-        # Frase completa
+        # 1) Frase completa (ajuda ranking, não é filtro obrigatório)
         score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
         score_params.append(f"%{desc_clean}%")
 
-        if len(terms) == 1:
-            # =====================
-            # Uma única palavra
-            # =====================
-            term = terms[0]
+        if len(terms) > 1:
+            # 2) Padrão composto — CABO%PP%PT
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 40 ELSE 0 END")
+            score_params.append(f"%{pattern}%")
 
-            # 1. Frase completa (mantém)
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
-            score_params.append(f"%{desc_clean}%")
-
-            # 2. Termo começa exatamente a descrição
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 30 ELSE 0 END")
-            score_params.append(f"{term} %")
-
-            # 3. Termo inicia uma palavra (meio da descrição)
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 20 ELSE 0 END")
-            score_params.append(f"% {term} %")
-
-            # 4. Termo presente em qualquer lugar
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 10 ELSE 0 END")
-            score_params.append(f"%{term}%")
-
-            # 5. Similaridade normalizada por tamanho (cast p/ evitar decimal)
-            score_parts.append(
-                f"""
-                CAST(
-                    CASE 
-                        WHEN LEN(SB1.B1_DESC) = 0 THEN 0
-                        ELSE ROUND(
-                            10 * (
-                                1.0 - ABS(LEN(SB1.B1_DESC) - {len(term)}) /
-                                (CASE 
-                                    WHEN LEN(SB1.B1_DESC) > {len(term)} THEN LEN(SB1.B1_DESC)
-                                    ELSE {len(term)}
-                                END)
-                            ), 
-                        0)
-                    END
-                AS INT)
-                """
-            )
-
-
-        else:
-            # =====================
-            # Várias palavras
-            # =====================
-            # 1. Frase completa
-            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
-            score_params.append(f"%{desc_clean}%")
-
+            # 3) Pesos individuais por termo
             for t in terms:
-
+                # começa a frase
                 score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 25 ELSE 0 END")
                 score_params.append(f"{t} %")
 
+                # termo iniciando palavra interna
                 score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 15 ELSE 0 END")
                 score_params.append(f"% {t} %")
 
+                # termo presente em qualquer lugar
                 score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 5 ELSE 0 END")
                 score_params.append(f"%{t}%")
 
-            # Similaridade normalizada da frase inteira
+            # 4) Similaridade por tamanho
             score_parts.append(
                 f"""
                 CAST(
@@ -167,6 +129,40 @@ class ProductRepository(BaseRepository):
                 """
             )
 
+        else:
+            # Caso apenas um termo
+            term = terms[0]
+
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 50 ELSE 0 END")
+            score_params.append(f"%{desc_clean}%")
+
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 30 ELSE 0 END")
+            score_params.append(f"{term} %")
+
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 20 ELSE 0 END")
+            score_params.append(f"% {term} %")
+
+            score_parts.append("CASE WHEN SB1.B1_DESC LIKE ? THEN 10 ELSE 0 END")
+            score_params.append(f"%{term}%")
+
+            score_parts.append(
+                f"""
+                CAST(
+                    CASE 
+                        WHEN LEN(SB1.B1_DESC) = 0 THEN 0
+                        ELSE ROUND(
+                            10 * (
+                                1.0 - ABS(LEN(SB1.B1_DESC) - {len(term)}) /
+                                (CASE 
+                                    WHEN LEN(SB1.B1_DESC) > {len(term)} THEN LEN(SB1.B1_DESC)
+                                    ELSE {len(term)}
+                                END)
+                            ), 
+                        0)
+                    END
+                AS INT)
+                """
+            )
 
         score_sql = " + ".join(score_parts)
 
@@ -185,7 +181,11 @@ class ProductRepository(BaseRepository):
         # =====================================================
         sql = f"""
             SELECT 
-                SB1.*,
+                SB1.B1_COD,
+                SB1.B1_DESC,
+                SB1.B1_TIPO,
+                SB1.B1_GRUPO,
+                SB1.B1_ATIVO,
                 ({score_sql}) AS relevance_score
             FROM SB1010 AS SB1
             WHERE {where_sql}
