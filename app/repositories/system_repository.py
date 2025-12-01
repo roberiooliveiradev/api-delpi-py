@@ -48,7 +48,7 @@ class SystemRepository(BaseRepository):
     def get_columns_table(self, tableName: str) -> dict:
         log_info(f"Buscando colunas da tabela {tableName}.")
         query = """
-            SELECT TOP 10
+            SELECT 
                 X3.*
             FROM
                 SX3010 AS X3
