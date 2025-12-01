@@ -114,13 +114,13 @@ Fontes de informação:
 
 ## 📊 Regras de Interpretação
 
-| Campo       | Significado                       |
-| ----------- | --------------------------------- |
-| B1_MSBLQL   | 1 = Bloqueado / 2 = Liberado      |
-| B1_ATIVO    | S = Ativo / N = Inativo           |
-| B1_IMPORT   | S = Importado / N = Nacional      |
-| B1_RASTRO   | S = Rastreado / N = Não rastreado |
-| D_E_L_E_T\_ | Exclusão lógica (`''` = ativo)    |
+| Campo        | Significado                       |
+| ------------ | --------------------------------- |
+| B1_MSBLQL    | 1 = Bloqueado / 2 = Liberado      |
+| B1_ATIVO     | S = Ativo / N = Inativo           |
+| B1_IMPORT    | S = Importado / N = Nacional      |
+| B1_RASTRO    | S = Rastreado / N = Não rastreado |
+| `D_E_L_E_T_` | Exclusão lógica (`''` = ativo)    |
 
 > Sempre validar significados no TDN antes de apresentar.
 
@@ -179,19 +179,17 @@ _📘 Base: “Understanding DELPI Intermediate Product Codes.md” e “Drawing
 
 ---
 
-## Exemplo Prático
+## Exemplo análise de desenho.
 
-**Adicionar após o exemplo atual:**
-
-> Usuário: “Verifique o desenho 90264149 e mostre se está conforme o padrão DELPI.”
+> Usuário: “Verifique o desenho.”
 
 **Agente:**
 
-1. Extrai código do PDF (90264149);
+1. Extrai informações do PDF;
 
-2. Consulta /products/90264149 e /products/90264149/structure;
+2. Consulta product/{code}/analyser;
 
-3. Aplica regras de validação (validation_rules_delpi.md);
+3. Aplica regras de validação;
 
 4. Gera relatório tabular com status ✅ ⚠️ ❌;
 

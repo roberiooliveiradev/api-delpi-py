@@ -171,15 +171,25 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-# 📗 Exemplos de solicitações do usuário
+# 📗 Exemplos de solicitações
 
-## Usuário: "Quais produtos serão produzidos hoje?"
+## 1. Usuário: "Listar produtos programados para produzir hoje"
 
--   TABELAS USADAS:
+🧱 Tabelas envolvidas
 
-    -   SC2 - Ordens de Produção;
-    -   SH8 - Operações Alocadas;
-    -   SD4 - Requisições Empenhadas;
+-   SC2010 — Ordens de Produção
+-   SH8010 — Operações Alocadas
+-   SD4010 — Requisições Empenhadas
+-   SB1010 — Cadastro de produtos
+
+⚙️ Condições aplicadas
+
+-   H8.H8_DTINI = data atual
+-   Filial = 01
+-   C2_PRIOR = 500 (Prioridade Livre)
+-   Somente registros ativos (`D_E_L_E_T_ = ''`)
+
+💾 Consulta:
 
 ```json
 {
@@ -189,24 +199,24 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
         "P.B1_DESC AS DESCRICAO_PRODUTO",
         "OP.C2_QUANT AS QTD_PLANEJADA",
         "OP.C2_UM AS UNIDADE",
-        "H8.H8_DTINI AS DATA_INICIO_OPERACAO"
+        "OA.H8_DTINI AS DATA_INICIO_OPERACAO"
     ],
     "joins": [
         {
             "type": "LEFT",
-            "table": "SD4010 AS SD4",
+            "table": "SD4010 AS RE",
             "left": "OP.C2_OP",
-            "right": "SD4.D4_OP"
+            "right": "RE.D4_OP"
         },
         {
             "type": "LEFT",
-            "table": "SH8010 AS H8",
+            "table": "SH8010 AS OA",
             "conditions": [
-                { "left": "SD4.D4_OP", "op": "=FIELD", "right": "H8.H8_OP" },
+                { "left": "RE.D4_OP", "op": "=FIELD", "right": "OA.H8_OP" },
                 {
-                    "left": "SD4.D4_OPERAC",
+                    "left": "RE.D4_OPERAC",
                     "op": "=FIELD",
-                    "right": "H8.H8_OPER"
+                    "right": "OA.H8_OPER"
                 }
             ]
         },
@@ -220,15 +230,15 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
     "filters": {
         "and": [
             { "OP.C2_FILIAL": { "op": "=", "value": "01" } },
-            { "SD4.D4_FILIAL": { "op": "=", "value": "01" } },
-            { "H8.H8_FILIAL": { "op": "=", "value": "01" } },
+            { "RE.D4_FILIAL": { "op": "=", "value": "01" } },
+            { "OA.H8_FILIAL": { "op": "=", "value": "01" } },
             { "OP.D_E_L_E_T_": { "op": "=", "value": "" } },
-            { "SD4.D_E_L_E_T_": { "op": "=", "value": "" } },
-            { "H8.D_E_L_E_T_": { "op": "=", "value": "" } },
+            { "RE.D_E_L_E_T_": { "op": "=", "value": "" } },
+            { "OA.D_E_L_E_T_": { "op": "=", "value": "" } },
             { "P.D_E_L_E_T_": { "op": "=", "value": "" } },
             { "P.B1_TIPO": { "op": "=", "value": "PA" } },
             { "OP.C2_PRIOR": { "op": "=", "value": "500" } },
-            { "H8.H8_DTINI": { "op": "=", "value": "20251127" } }
+            { "OA.H8_DTINI": { "op": "=", "value": "20251127" } }
         ]
     },
     "group_by": [
@@ -236,7 +246,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
         "P.B1_DESC",
         "OP.C2_QUANT",
         "OP.C2_UM",
-        "H8.H8_DTINI"
+        "OA.H8_DTINI"
     ],
     "order_by": [{ "field": "OP.C2_PRODUTO", "direction": "ASC" }],
     "page": 1,
@@ -246,16 +256,16 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 > Substitua no filtro de "H8.H8_DTINI": { "op": "=", "value": "20251126" } pela data atualizada.
 
-## Usuário: "Quais ops já foram finalizada hoje?"
+## 2. Usuário: "Listar OPs (ordens de produção) finalizadas hoje"
 
-Tabelas envolvidas:
+🧱 Tabelas envolvidas:
 
 -   SC2010 — Ordens de Produção
 -   SD4010 — Empenhos de componentes
 -   SB1010 — Cadastro de produtos
 -   SH8010 — Roteiro de operações
 
-Condições aplicadas:
+⚙️ Condições aplicadas:
 
 -   OP.C2_QUANT = OP.C2_QUJE → total necessário produzido
 -   OA.H8_DTINI = 20251127 → operação de hoje
@@ -263,7 +273,7 @@ Condições aplicadas:
 -   Todos os registros ativos (`D_E_L_E_T_ = ''`)
 -   OP.C2_PRIOR = 500 → prioridade Livre (501 Bloqueado)
 
-Consulta:
+💾 Consulta:
 
 ```json
 {
@@ -343,24 +353,24 @@ Consulta:
 }
 ```
 
-## Usuário: "Quais ops programadas para hoje estão em aberto?"
+## 3. Usuário: "Listar OPs programadas em aberto (não finalizadas) de hoje"
 
-Tabelas envolvidas:
+🧱 Tabelas envolvidas:
 
 -   SC2010 — Ordens de Produção
 -   SD4010 — Empenhos de componentes
 -   SB1010 — Cadastro de produtos
 -   SH8010 — Roteiro de operações
 
-Condições aplicadas:
+⚙️ Condições aplicadas:
 
--   OP.C2_QUANT > OP.C2_QUJE → falta produzir para finalizar
+-   OP.C2_QUANT > OP.C2_QUJE → não finalizada
 -   OA.H8_DTINI = 20251127 → operação de hoje
 -   Filial = 01 → Pergunte a filial ao usuário
 -   Todos os registros ativos (`D_E_L_E_T_ = ''`)
 -   OP.C2_PRIOR = 500 → prioridade Livre (501 Bloqueado)
 
-Consulta:
+💾 Consulta:
 
 ```json
 {
@@ -437,7 +447,24 @@ Consulta:
 }
 ```
 
-## Usuário: "Liste as OPs distintas em aberto?"
+## 4. Usuário: "Liste as OPs distintas em aberto."
+
+🧱 Tabelas envolvidas
+
+-   SC2010 — Ordens
+-   SD4010 — Empenhos
+-   SH8010 — Operações
+
+⚙️ Condições aplicadas
+
+-   DISTINCT OP.C2_OP
+-   C2_QUANT > C2_QUJE
+-   H8_DTINI = hoje
+-   C2_PRIOR = 500
+-   Filial = 01
+-   `D_E_L_E_T_ = ''`
+
+💾 Consulta
 
 ```json
 {
@@ -482,9 +509,25 @@ Consulta:
 }
 ```
 
-## Objetivo: agrupar as ordens por centro de trabalho (CT) e contar finalizadas e não finalizadas.
+## 5. Usuário: "Agrupar as ordens por centro de trabalho (CT) e contar finalizadas e não finalizadas."
 
--   Relação: SC2010 → SD4010 → SH8010
+🧱 Tabelas envolvidas
+
+-   SC2010
+-   SD4010
+-   SH8010
+
+⚙️ Condições aplicadas
+
+-   C2_QUANT = C2_QUJE → finalizada
+-   C2_QUANT > C2_QUJE → não finalizada
+-   Agrupamento por H8_CTRAB
+-   C2_PRIOR = 500
+-   H8_DTINI = hoje
+-   Filial = 01
+-   Registros ativos
+
+💾 Consulta
 
 ```json
 {
@@ -534,9 +577,24 @@ Consulta:
 }
 ```
 
-### Objetivo: identificar componentes sem empenho registrado (possível travamento de produção) para um CT especídfico.
+## 6. Usuário: “Identificar componentes sem empenho registrado (travamento de produção) para um CT específico”
 
--   Regra: D4_QUANT = 0
+🧱 Tabelas envolvidas
+
+-   SD4010 — Empenhos
+-   SH8010 — Operações
+-   SB1010 — Produtos
+
+⚙️ Condições aplicadas
+
+-   D4_QUANT = 0 (sem empenho)
+-   H8_CTRAB = CT-19
+-   H8_DTINI = hoje
+-   C2_PRIOR = 500
+-   Filial = 01
+-   Registros ativos
+
+💾 Consulta
 
 ```json
 {
@@ -576,7 +634,6 @@ Consulta:
             { "OA.D_E_L_E_T_": { "op": "=", "value": "" } },
             { "RE.D4_FILIAL": { "op": "=", "value": "01" } },
             { "OA.H8_FILIAL": { "op": "=", "value": "01" } },
-            { "OP.C2_PRIOR": { "op": "=", "value": "500" } },
             { "OA.H8_DTINI": { "op": "=", "value": "20251127" } },
             { "OA.H8_CTRAB": { "op": "=", "value": "CT-19" } },
             { "RE.D4_QUANT": { "op": "=", "value": 0 } }
@@ -588,13 +645,26 @@ Consulta:
 }
 ```
 
-## Objetivo: identificar ordens finalizadas sem consumo de componentes.
+## 7. Usuário: “Identificar ordens finalizadas sem consumo de componentes”
 
-Regras:
+🧱 Tabelas envolvidas
 
--   C2_QUANT = C2_QUJE → finalizada
+-   SC2010 — Ordens
+-   SD4010 — Empenhos
+-   SB1010 — Produtos
+-   SH8010 — Operações
 
--   D4_QUANT = 0 → sem empenho
+⚙️ Condições aplicadas
+
+-   C2_QUANT = C2_QUJE (finalizada)
+-   SUM(D4_QUANT) = 0 (sem consumo)
+-   H8_CTRAB = CT-19
+-   H8_DTINI = hoje
+-   C2_PRIOR = 500
+-   Filial = 01
+-   Registros ativos
+
+💾 Consulta
 
 ```json
 {
@@ -670,13 +740,26 @@ Regras:
 }
 ```
 
-## Objetivo: Calcula a média de tempo (em horas) entre o início (H8_HRINI) e o fim (H8_HRFIM) das operações realizadas hoje (2025-11-27).
+## 8. Usuário: "Média de tempo por CT (H8_HRINI → H8_HRFIM)"
 
--   Considera apenas ordens finalizadas (C2_QUANT = C2_QUJE).
+🧱 Tabelas envolvidas
 
--   Agrupa por Centro de Trabalho (H8_CTRAB).
+-   SC2010 — Ordens de Produção
+-   SD4010 — Empenhos
+-   SH8010 — Operações
 
--   Filtra apenas registros ativos da filial 01 e prioridade livre (500).
+⚙️ Condições aplicadas
+
+-   Apenas ordens finalizadas (C2_QUANT = C2_QUJE)
+-   Agrupar por H8_CTRAB
+-   C2_PRIOR = 500
+-   Filial = 01
+-   H8_DTINI = hoje
+-   H8_HRFIM IS NOT NULL
+-   H8_HRINI IS NOT NULL
+-   Registros ativos
+
+💾 Consulta
 
 ```json
 {
@@ -727,7 +810,26 @@ Regras:
 }
 ```
 
-## Usuário: "Monte uma consulta que mostre o total de estoque (`B2_QATU`) por filial e local apenas para produtos do grupo 1008 com 'CABO' na descrição, agrupando com subtotais."
+> Atenção: as colunas de horas no TOTVS são no formato texto HH:MM por isso é necessário usar o CAST
+
+## 9. Usuário: "Estoque total por filial/local – Grupo 1008 CABO"
+
+🧱 Tabelas envolvidas
+
+-   SD4010 — Empenhos de componentes
+-   SH8010 — Operações alocadas
+-   SB1010 — Cadastro de produtos
+
+⚙️ Condições aplicadas
+
+-   `D4_QUANT` = 0 → componente sem empenho
+-   `H8_CTRAB` = 'CT-19' → filtrar por centro de trabalho específico
+-   `H8_DTINI` = data atual (20251127)
+-   `C2_PRIOR` = 500 → apenas OPs com prioridade livre
+-   Filial = 01
+-   Registros ativos (`D_E_L_E_T* = '' `)
+
+💾 Consulta
 
 ```json
 {
@@ -763,7 +865,9 @@ Regras:
 
 ---
 
-## 🟦 Exemplo 1 — Consulta simples com paginação
+## Exemplos básicos de funcionalidades:
+
+### 🟦 Exemplo 1 — Consulta simples com paginação
 
 ```json
 {
@@ -780,7 +884,7 @@ Regras:
 
 ---
 
-## 🟩 Exemplo 2 — Join usando comparação campo–campo
+### 🟩 Exemplo 2 — Join usando comparação campo–campo
 
 ```json
 {
@@ -797,7 +901,7 @@ Regras:
 
 ---
 
-## 🟧 Exemplo 3 — CTE + comparação campo–campo
+### 🟧 Exemplo 3 — CTE + comparação campo–campo
 
 ```json
 {
@@ -829,7 +933,7 @@ Regras:
 
 ---
 
-## 🟥 Exemplo 4 — HAVING com função agregada (SQL Server way)
+### 🟥 Exemplo 4 — HAVING com função agregada (SQL Server way)
 
 ```json
 {
@@ -850,7 +954,7 @@ Regras:
 
 ---
 
-## 🟨 Exemplo 5 — JOIN com múltiplas condições + tuple compare
+### 🟨 Exemplo 5 — JOIN com múltiplas condições + tuple compare
 
 ```json
 {
@@ -874,7 +978,7 @@ Regras:
 
 ---
 
-## 🟪 Exemplo 6 — Expressões SQL no WHERE
+### 🟪 Exemplo 6 — Expressões SQL no WHERE
 
 ```json
 {
@@ -898,7 +1002,7 @@ Regras:
 
 ---
 
-## 🟫 Exemplo 7 — CTE final com agregação automática
+### 🟫 Exemplo 7 — CTE final com agregação automática
 
 ```json
 {

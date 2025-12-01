@@ -1071,6 +1071,10 @@ O roteiro contém:
 -   Filial produtiva (G2_FILIAL)
 -   Fluxo sequencial obrigatório
 
+> **A unidade de medida do tempo padrão (G2_TEMPAD) é hora/mil**
+
+> **A unidade de medida do tempo padrão (G2_SETUP) é minutos**
+
 Para o agente, o SG2010 é a representação oficial da produção.
 Se ele contradiz o desenho -> **erro grave.**
 

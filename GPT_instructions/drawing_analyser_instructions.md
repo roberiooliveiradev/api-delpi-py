@@ -224,6 +224,10 @@ GET /products/{code}/guide?page=1&page_size=50&max_depth=10
 | Recursos e tempos coerentes                   | Confirmar com processo padrão |
 | Operação de inspeção presente                 | Confirmar CT-70 ou CT-99      |
 
+> **A unidade de medida do tempo padrão (G2_TEMPAD) é hora/mil**
+
+> **A unidade de medida do tempo padrão (G2_SETUP) é minutos**
+
 **📘 Unidade das colunas**
 
 | Coluna    | Unidade  | Obs                                                                                        |
