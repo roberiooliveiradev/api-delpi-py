@@ -209,3 +209,12 @@ def get_product_analyser(
     except Exception as e:
         log_error(f"Erro ao montar análise completa do produto {code}: {e}")
         raise DatabaseConnectionError(str(e))
+
+def get_customers(code: str, page: int = 1, page_size: int = 50) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando clientes amarrados ao produto {code} (página {page})")
+    try:
+        return repo.list_customers(code, page, page_size)
+    except Exception as e:
+        log_error(f"Erro ao listar clientes para o produto {code}: {e}")
+        raise DatabaseConnectionError(str(e))

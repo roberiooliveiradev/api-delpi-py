@@ -1194,8 +1194,81 @@ class ProductRepository(BaseRepository):
             "data": final
         }
 
+    # -------------------------------
+    # 🔹 CUSTOMERS (SA7010/SA1010) 
+    # -------------------------------
+    def list_customers(self, code: str, page: int = 1, page_size: int = 50) -> dict:
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
 
+        log_info(f"Listando clientes amarrados ao produto {code}, página {page}, tamanho {page_size}")
+        offset = (page - 1) * page_size
 
+        # Contagem total
+        count_query = """
+            SELECT COUNT(*) AS total
+            FROM SA7010 AS SA7
+            INNER JOIN SA1010 AS SA1
+                ON SA1.A1_COD = SA7.A7_CLIENTE
+            AND SA1.A1_LOJA = SA7.A7_LOJA
+            AND SA1.D_E_L_E_T_ = ''
+            WHERE SA7.D_E_L_E_T_ = ''
+            AND SA7.A7_PRODUTO = ?
+        """
+        total_row = self.execute_one(count_query, (code,))
+        total_rows = int(total_row["total"] or 0)
+
+        # Consulta paginada
+        query = """
+            SELECT 
+                SA1.A1_COD,
+                SA1.A1_NOME,
+                SA1.A1_NREDUZ,
+                SA1.A1_MSBLQL,
+                SA1.A1_LOJA,
+                SA7.A7_PRODUTO,
+                SA7.A7_CODCLI,
+                SA7.A7_DESCCLI,
+                SA7.A7_PRECO01,
+                SA7.A7_DTREF01,
+                SA7.A7_PRECO02,
+                SA7.A7_DTREF02,
+                SA7.A7_PRECO03,
+                SA7.A7_DTREF03,
+                SA7.A7_PRECO04,
+                SA7.A7_DTREF04,
+                SA7.A7_PRECO05,
+                SA7.A7_DTREF05,
+                SA7.A7_PRECO06,
+                SA7.A7_DTREF06,
+                SA7.A7_PRECO07,
+                SA7.A7_DTREF07,
+                SA7.A7_PRECO08,
+                SA7.A7_DTREF08,
+                SA7.A7_PRECO09,
+                SA7.A7_DTREF09
+            FROM SA7010 AS SA7
+            INNER JOIN SA1010 AS SA1
+                ON SA1.A1_COD = SA7.A7_CLIENTE
+            AND SA1.A1_LOJA = SA7.A7_LOJA
+            AND SA1.D_E_L_E_T_ = ''
+            WHERE SA7.D_E_L_E_T_ = ''
+            AND SA7.A7_PRODUTO = ?
+            ORDER BY SA7.A7_CLIENTE, SA7.A7_LOJA
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+        data = self.execute_query(query, (code, offset, page_size))
+
+        return {
+            "success": True,
+            "total": total_rows,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total_rows + page_size - 1) // page_size,
+            "data": data
+        }
 
     def _convert_date_to_protheus(date_str: Optional[str]) -> Optional[str]:
         """

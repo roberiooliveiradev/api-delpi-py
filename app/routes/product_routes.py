@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection, get_product_analyser
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers
 from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
@@ -275,4 +275,25 @@ def product_analyser(
         )
     except Exception as e:
         log_error(f"Erro ao analisar completamente o produto {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+
+@router.get("/{code}/customers", summary="Consulta os clientes amarrados a um produto com paginação")
+def customers(
+    code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500)
+):
+    """
+    Retorna os clientes vinculados a um produto (SA7010 — Amarração Produto x Cliente)
+    com suporte a paginação.
+    """
+    try:
+        result = get_customers(code, page, page_size)
+        return success_response(
+            data=result,
+            message=f"Clientes vinculados ao produto {code} retornados com sucesso (página {page}/{result['totalPages']})."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar clientes do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
