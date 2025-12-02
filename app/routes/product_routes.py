@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers
+from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers, get_structure_excel
 from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
@@ -8,6 +8,8 @@ from app.repositories.base_repository import BaseRepository
 from pydantic import BaseModel
 from typing import Optional
 from app.models.product_model import ProductSearchRequest
+from fastapi.responses import StreamingResponse
+
 
 router = APIRouter()
 
@@ -96,6 +98,31 @@ def structure(
     except Exception as e:
         log_error(f"Erro ao consultar estrutura do produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
+
+@router.get("/{code}/structure/excel", summary="Exporta a estrutura formatada em planilha Excel")
+def structure_excel(
+    code: str,
+    max_depth: int = Query(10, ge=1, le=15)
+):
+    """
+    Retorna a estrutura (BOM) do produto em formato Excel, 
+    aplicando formatação visual conforme padrão DELPI.
+    """
+    try:
+        excel_file = get_structure_excel(code, max_depth)
+        filename = f"Estrutura_{code}.xlsx"
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        log_error(f"Erro ao gerar planilha Excel da estrutura de {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+
+
 
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
 def parents(
@@ -297,3 +324,8 @@ def customers(
     except Exception as e:
         log_error(f"Erro ao consultar clientes do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
+
+
+
+
