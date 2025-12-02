@@ -11,8 +11,6 @@ from app.models.product_model import ProductSearchRequest
 from fastapi.responses import StreamingResponse
 from fastapi.responses import JSONResponse
 
-
-
 router = APIRouter()
 
 @router.get("/", summary="Listagem de produtos com limite")
@@ -101,25 +99,33 @@ def structure(
         log_error(f"Erro ao consultar estrutura do produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
-
 @router.get(
     "/{code}/structure/excel",
     summary="Exporta a estrutura formatada em planilha Excel (público)",
     include_in_schema=True
 )
-async def structure_excel_public(code: str, max_depth: int = 10):
+async def structure_excel_public(code: str, max_depth: int = 10, download: bool = False):
     """
-    Retorna o link clicável para o download público do Excel.
+    Retorna o link clicável para download ou o arquivo Excel, conforme o parâmetro 'download'.
     """
-
-
     try:
-        # Gera o arquivo Excel
+        # Gera o arquivo Excel na memória
         excel_file = get_structure_excel(code, max_depth)
         filename = f"Estrutura_{code}.xlsx"
 
-        # Retorna link clicável (com base na URL atual)
-        public_url = f"https://api.transformamaisdelpi.com.br/products/{code}/structure/excel"
+        # ✅ Se for chamado com download=true, retorna o arquivo diretamente
+        if download:
+            return StreamingResponse(
+                excel_file,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}",
+                    "Cache-Control": "public, max-age=86400"
+                }
+            )
+
+        # ✅ Caso contrário, retorna o link clicável
+        public_url = f"https://api.transformamaisdelpi.com.br/products/{code}/structure/excel?download=true"
         html_link = f'<a href="{public_url}" target="_blank" rel="noopener noreferrer">📂 Baixar Estrutura {code}</a>'
 
         return JSONResponse(
@@ -133,6 +139,9 @@ async def structure_excel_public(code: str, max_depth: int = 10):
     except Exception as e:
         log_error(f"Erro ao gerar planilha Excel pública de {code}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+
 
 
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
