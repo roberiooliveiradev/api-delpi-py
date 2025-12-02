@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.models.product_model import ProductSearchRequest
 from fastapi.responses import StreamingResponse
+import base64
 
 
 router = APIRouter()
@@ -121,6 +122,28 @@ def structure_excel(
         log_error(f"Erro ao gerar planilha Excel da estrutura de {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
+
+@router.get("/{code}/structure/excel/base64", summary="Retorna estrutura Excel codificada em Base64")
+def structure_excel_base64(
+    code: str,
+    max_depth: int = Query(10, ge=1, le=15)
+):
+    """
+    Retorna a estrutura do produto em formato Excel (.xlsx) codificado em Base64.
+    Ideal para agentes GPT e integrações que não manipulam binário.
+    """
+    try:
+        excel_file = get_structure_excel(code, max_depth)
+        encoded = base64.b64encode(excel_file.getvalue()).decode("utf-8")
+
+        return {
+            "filename": f"Estrutura_{code}.xlsx",
+            "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "data_base64": encoded
+        }
+    except Exception as e:
+        log_error(f"Erro ao gerar Excel em Base64 para {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
 
 
 
