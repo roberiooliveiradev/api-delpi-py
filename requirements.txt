@@ -4,3 +4,5 @@ python-dotenv
 pyodbc
 pyngrok
 PyJWT
+pandas
+openpyxl
