@@ -4,7 +4,7 @@ from app.core.exceptions import BusinessLogicError
 from app.utils.logger import log_info, log_error
 from typing import Optional
 from datetime import datetime
-
+import math
 class ProductRepository(BaseRepository):
     """
     Repositório responsável por consultas na tabela SG1010 (estrutura) e SB1010 (produtos).
@@ -389,46 +389,30 @@ class ProductRepository(BaseRepository):
     # -------------------------------
     # 🔹 STRUCTURE (BOM)
     # -------------------------------
-    def list_structure(self, code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
-        if page < 1:
-            raise ValueError("page must be >= 1")
-        if not 1 <= page_size <= 500:
-            raise ValueError("page_size must be between 1 and 500")
-        if not 1 <= max_depth <= 50:
-            raise ValueError("max_depth must be between 1 and 50")
-
-        log_info(f"CTE estrutura (parametrizado) for {code} depth={max_depth} page={page} size={page_size}")
-        offset = (page - 1) * page_size
-
-        # Contagem total
-        count_query = """
-            WITH RECURSIVE_BOM AS (
-                SELECT G1_COD AS parentCode, G1_COMP AS componentCode, G1_QUANT AS quantity, 1 AS level
-                FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
-
-                UNION ALL
-
-                SELECT c.G1_COD, c.G1_COMP, c.G1_QUANT, p.level + 1
-                FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
-                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
-            )
-            SELECT COUNT(*) AS total FROM RECURSIVE_BOM;
+    def list_structure(self, code: str, max_depth: int = 5, page: int = 1, page_size: int = 100):
         """
-        total_row = self.execute_one(count_query, (code, max_depth))
-        total_rows = int(total_row["total"] or 0)
+        Retorna a estrutura (BOM) do produto em formato hierárquico,
+        incluindo tipo de produto (B1_TIPO) e unidade de medida (B1_UM).
+        Compatível com SQL Server.
+        """
 
-        # Dados detalhados com JOIN na SB1010 (descrições)
         data_query = """
             WITH RECURSIVE_BOM AS (
-                SELECT G1_COD AS parentCode, G1_COMP AS componentCode, G1_QUANT AS quantity, 1 AS level
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS componentCode,
+                    G1_QUANT AS quantity,
+                    1 AS level
                 FROM SG1010 WITH (NOLOCK)
                 WHERE D_E_L_E_T_ = '' AND G1_COD = ?
 
                 UNION ALL
 
-                SELECT c.G1_COD, c.G1_COMP, c.G1_QUANT, p.level + 1
+                SELECT 
+                    c.G1_COD AS parentCode,
+                    c.G1_COMP AS componentCode,
+                    c.G1_QUANT AS quantity,
+                    p.level + 1 AS level
                 FROM SG1010 c WITH (NOLOCK)
                 INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
                 WHERE c.D_E_L_E_T_ = '' AND p.level < ?
@@ -436,8 +420,12 @@ class ProductRepository(BaseRepository):
             SELECT 
                 rb.parentCode,
                 pdesc.B1_DESC AS parentDesc,
+                pdesc.B1_TIPO AS parentType,
+                pdesc.B1_UM AS parentUM,
                 rb.componentCode,
                 cdesc.B1_DESC AS componentDesc,
+                cdesc.B1_TIPO AS componentType,
+                cdesc.B1_UM AS componentUM,
                 rb.quantity,
                 rb.level
             FROM RECURSIVE_BOM rb
@@ -445,38 +433,72 @@ class ProductRepository(BaseRepository):
                 ON pdesc.B1_COD = rb.parentCode AND pdesc.D_E_L_E_T_ = ''
             LEFT JOIN SB1010 cdesc WITH (NOLOCK)
                 ON cdesc.B1_COD = rb.componentCode AND cdesc.D_E_L_E_T_ = ''
-            ORDER BY rb.level, rb.parentCode, rb.componentCode
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY;
+            ORDER BY rb.level, rb.parentCode, rb.componentCode;
         """
-        rows = self.execute_query(data_query, (code, max_depth, offset, page_size))
 
-        data = [
-            {
-                "parentCode": (r["parentCode"] or "").strip(),
-                "parentDesc": (r["parentDesc"] or "").strip(),
-                "componentCode": (r["componentCode"] or "").strip(),
-                "componentDesc": (r["componentDesc"] or "").strip(),
-                "quantity": float(r["quantity"] or 0),
-                "level": int(r["level"]),
+        rows = self.execute_query(data_query, (code, max_depth))
+
+        # Monta estrutura hierárquica
+        items = {}
+        for r in rows:
+            comp = {
+                "code": r["componentCode"],
+                "description": r["componentDesc"],
+                "type": r["componentType"],
+                "unit": r["componentUM"],
+                "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
+                "components": []
             }
-            for r in rows
-        ]
 
-        hierarchy = self._build_hierarchy(data, code, mode="structure")
+            parent_code = r["parentCode"]
+            if parent_code not in items:
+                items[parent_code] = {
+                    "code": parent_code,
+                    "description": r["parentDesc"],
+                    "type": r["parentType"],
+                    "unit": r["parentUM"],
+                    "quantity": 1.0,
+                    "components": []
+                }
+            items[parent_code]["components"].append(comp)
+            items[comp["code"]] = comp
+
+        root = items.get(code, {
+            "code": code,
+            "description": None,
+            "type": None,
+            "unit": None,
+            "quantity": 1.0,
+            "components": []
+        })
+
+        # Paginação somente no nível raiz
+        root_components = [items[c["code"]] for c in root["components"]] if "components" in root else []
+        offset = (page - 1) * page_size
+        root["components"] = root_components[offset: offset + page_size]
+
         return {
             "success": True,
-            "total": total_rows,
+            "total": len(root_components),
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
-            "data": hierarchy,
+            "totalPages": math.ceil(len(root_components) / page_size),
+            "data": root
         }
+
 
 
     # -------------------------------
     # 🔹 PARENTS (WHERE USED)
     # -------------------------------
     def list_parents(self, code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
+        """
+        Retorna os produtos pais (WHERE USED) em formato hierárquico.
+        Inclui tipo de produto (B1_TIPO) e unidade de medida (B1_UM).
+        Compatível com SQL Server.
+        Mantém quantidades originais (G1_QUANT).
+        """
+
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
@@ -484,38 +506,28 @@ class ProductRepository(BaseRepository):
         if not 1 <= max_depth <= 50:
             raise ValueError("max_depth must be between 1 and 50")
 
-        log_info(f"CTE parents (parametrizado) for {code} depth={max_depth} page={page} size={page_size}")
-        offset = (page - 1) * page_size
+        log_info(f"Consultando pais (WHERE USED) de {code}, depth={max_depth}, page={page}, size={page_size}")
 
-        # Contagem total
-        count_query = """
-            WITH RECURSIVE_PARENTS AS (
-                SELECT G1_COD AS parentCode, G1_COMP AS childCode, G1_QUANT AS quantity, 1 AS level
-                FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COMP = ?
-
-                UNION ALL
-
-                SELECT c.G1_COD, p.parentCode, c.G1_QUANT, p.level + 1
-                FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_PARENTS p ON p.parentCode = c.G1_COMP
-                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
-            )
-            SELECT COUNT(*) AS total FROM RECURSIVE_PARENTS;
-        """
-        total_row = self.execute_one(count_query, (code, max_depth))
-        total_rows = int(total_row["total"] or 0)
-
-        # Dados detalhados com descrições
+        # =====================================================
+        # 🔹 CTE recursiva sem paginação interna
+        # =====================================================
         data_query = """
             WITH RECURSIVE_PARENTS AS (
-                SELECT G1_COD AS parentCode, G1_COMP AS childCode, G1_QUANT AS quantity, 1 AS level
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS childCode,
+                    G1_QUANT AS quantity,
+                    1 AS level
                 FROM SG1010 WITH (NOLOCK)
                 WHERE D_E_L_E_T_ = '' AND G1_COMP = ?
 
                 UNION ALL
 
-                SELECT c.G1_COD, p.parentCode, c.G1_QUANT, p.level + 1
+                SELECT 
+                    c.G1_COD AS parentCode,
+                    c.G1_COMP AS childCode,
+                    c.G1_QUANT AS quantity,
+                    p.level + 1 AS level
                 FROM SG1010 c WITH (NOLOCK)
                 INNER JOIN RECURSIVE_PARENTS p ON p.parentCode = c.G1_COMP
                 WHERE c.D_E_L_E_T_ = '' AND p.level < ?
@@ -523,8 +535,12 @@ class ProductRepository(BaseRepository):
             SELECT 
                 rp.parentCode,
                 pdesc.B1_DESC AS parentDesc,
+                pdesc.B1_TIPO AS parentType,
+                pdesc.B1_UM AS parentUM,
                 rp.childCode,
                 cdesc.B1_DESC AS childDesc,
+                cdesc.B1_TIPO AS childType,
+                cdesc.B1_UM AS childUM,
                 rp.quantity,
                 rp.level
             FROM RECURSIVE_PARENTS rp
@@ -532,32 +548,66 @@ class ProductRepository(BaseRepository):
                 ON pdesc.B1_COD = rp.parentCode AND pdesc.D_E_L_E_T_ = ''
             LEFT JOIN SB1010 cdesc WITH (NOLOCK)
                 ON cdesc.B1_COD = rp.childCode AND cdesc.D_E_L_E_T_ = ''
-            ORDER BY rp.level, rp.parentCode
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY;
+            ORDER BY rp.level, rp.parentCode, rp.childCode;
         """
-        rows = self.execute_query(data_query, (code, max_depth, offset, page_size))
 
-        data = [
-            {
-                "parentCode": (r["parentCode"] or "").strip(),
-                "parentDesc": (r["parentDesc"] or "").strip(),
-                "childCode": (r["childCode"] or "").strip(),
-                "childDesc": (r["childDesc"] or "").strip(),
-                "quantity": float(r["quantity"] or 0),
-                "level": int(r["level"]),
+        rows = self.execute_query(data_query, (code, max_depth))
+
+        # =====================================================
+        # 🔹 Monta estrutura hierárquica (filho → pais)
+        # =====================================================
+        items = {}
+        for r in rows:
+            parent = {
+                "code": r["parentCode"],
+                "description": r["parentDesc"],
+                "type": r["parentType"],
+                "unit": r["parentUM"],
+                "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
+                "parents": []
             }
-            for r in rows
-        ]
 
-        hierarchy = self._build_hierarchy(data, code, mode="parents")
+            child_code = r["childCode"]
+            if child_code not in items:
+                items[child_code] = {
+                    "code": child_code,
+                    "description": r["childDesc"],
+                    "type": r["childType"],
+                    "unit": r["childUM"],
+                    "quantity": 1.0,
+                    "parents": []
+                }
+
+            # adiciona o pai dentro do campo "parents"
+            items[child_code]["parents"].append(parent)
+            items[parent["code"]] = parent  # adiciona o pai ao índice global
+
+        # =====================================================
+        # 🔹 Produto raiz (filho consultado)
+        # =====================================================
+        root = items.get(code, {
+            "code": code,
+            "description": None,
+            "type": None,
+            "unit": None,
+            "quantity": 1.0,
+            "parents": []
+        })
+
+        # Paginação somente no primeiro nível
+        root_parents = [items[p["code"]] for p in root["parents"]] if "parents" in root else []
+        offset = (page - 1) * page_size
+        root["parents"] = root_parents[offset: offset + page_size]
+
         return {
             "success": True,
-            "total": total_rows,
+            "total": len(root_parents),
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
-            "data": hierarchy,
+            "totalPages": math.ceil(len(root_parents) / page_size),
+            "data": root
         }
+
 
     # -------------------------------
     # 🔹 SUPPLIERS
