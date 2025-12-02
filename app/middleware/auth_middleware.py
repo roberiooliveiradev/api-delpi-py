@@ -12,7 +12,15 @@ PUBLIC_PATHS = {
 }
 
 def is_public_path(path: str) -> bool:
-    return path in PUBLIC_PATHS
+    # Caminhos públicos fixos
+    if path in PUBLIC_PATHS:
+        return True
+
+    # Rota pública para exportação Excel
+    if path.startswith("/products/") and path.endswith("/structure/excel"):
+        return True
+
+    return False
 
 
 async def jwt_middleware(request: Request, call_next):

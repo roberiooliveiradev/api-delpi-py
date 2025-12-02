@@ -103,66 +103,29 @@ def structure(
         return error_response(f"Erro inesperado: {e}")
 
 
-@router.get("/{code}/structure/excel", summary="Exporta a estrutura formatada em planilha Excel")
-def structure_excel(
-    code: str,
-    max_depth: int = Query(10, ge=1, le=15)
-):
-    """
-    Retorna a estrutura (BOM) do produto em formato Excel, 
-    aplicando formatação visual conforme padrão DELPI.
-    """
+@router.get(
+    "/{code}/structure/excel",
+    summary="Exporta a estrutura formatada em planilha Excel (público)",
+    include_in_schema=True
+)
+async def structure_excel_public(code: str, max_depth: int = 10):
+    from fastapi.responses import StreamingResponse
+    from app.services.product_service import get_structure_excel
+    from app.utils.logger import log_error
+
     try:
         excel_file = get_structure_excel(code, max_depth)
         filename = f"Estrutura_{code}.xlsx"
         return StreamingResponse(
             excel_file,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Cache-Control": "public, max-age=86400"  # mantém por 24h
+            }
         )
     except Exception as e:
-        log_error(f"Erro ao gerar planilha Excel da estrutura de {code}: {e}")
-        return error_response(f"Erro inesperado: {e}")
-
-
-@router.get("/{code}/structure/excel/base64", summary="Retorna estrutura Excel codificada em Base64")
-def structure_excel_base64(
-    code: str,
-    max_depth: int = Query(10, ge=1, le=15)
-):
-    """
-    Retorna a estrutura do produto em formato Excel (.xlsx) codificado em Base64.
-    Ideal para agentes GPT e integrações que não manipulam binário.
-    """
-    try:
-        excel_file = get_structure_excel(code, max_depth)
-        encoded = base64.b64encode(excel_file.getvalue()).decode("utf-8")
-
-        return {
-            "filename": f"Estrutura_{code}.xlsx",
-            "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "data_base64": encoded
-        }
-    except Exception as e:
-        log_error(f"Erro ao gerar Excel em Base64 para {code}: {e}")
-        return error_response(f"Erro inesperado: {e}")
-
-@router.get("/{code}/structure/excel/download", summary="Gera e baixa Excel direto")
-def download_structure_excel(code: str, max_depth: int = 10):
-    """Gera o Excel, salva temporariamente no servidor e retorna via FileResponse"""
-    try:
-        excel_file = get_structure_excel(code, max_depth)
-        temp_dir = tempfile.gettempdir()
-        file_path = os.path.join(temp_dir, f"Estrutura_{code}.xlsx")
-        with open(file_path, "wb") as f:
-            f.write(excel_file.getvalue())
-        return FileResponse(
-            file_path,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=f"Estrutura_{code}.xlsx"
-        )
-    except Exception as e:
-        log_error(f"Erro ao baixar Excel para {code}: {e}")
+        log_error(f"Erro ao gerar planilha Excel pública de {code}: {e}")
         return {"error": str(e)}
 
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
