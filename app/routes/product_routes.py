@@ -9,10 +9,9 @@ from pydantic import BaseModel
 from typing import Optional
 from app.models.product_model import ProductSearchRequest
 from fastapi.responses import StreamingResponse
-import base64
-from fastapi.responses import FileResponse
-import tempfile
-import os
+from fastapi.responses import JSONResponse
+
+
 
 router = APIRouter()
 
@@ -109,24 +108,32 @@ def structure(
     include_in_schema=True
 )
 async def structure_excel_public(code: str, max_depth: int = 10):
-    from fastapi.responses import StreamingResponse
-    from app.services.product_service import get_structure_excel
-    from app.utils.logger import log_error
+    """
+    Retorna o link clicável para o download público do Excel.
+    """
+
 
     try:
+        # Gera o arquivo Excel
         excel_file = get_structure_excel(code, max_depth)
         filename = f"Estrutura_{code}.xlsx"
-        return StreamingResponse(
-            excel_file,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={
-                "Content-Disposition": f"attachment; filename={filename}",
-                "Cache-Control": "public, max-age=86400"  # mantém por 24h
+
+        # Retorna link clicável (com base na URL atual)
+        public_url = f"https://api.transformamaisdelpi.com.br/products/{code}/structure/excel"
+        html_link = f'<a href="{public_url}" target="_blank" rel="noopener noreferrer">📂 Baixar Estrutura {code}</a>'
+
+        return JSONResponse(
+            content={
+                "message": "Arquivo Excel gerado com sucesso!",
+                "download_url": public_url,
+                "html_link": html_link
             }
         )
+
     except Exception as e:
         log_error(f"Erro ao gerar planilha Excel pública de {code}: {e}")
-        return {"error": str(e)}
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
 def parents(
