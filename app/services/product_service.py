@@ -241,11 +241,9 @@ def get_structure_excel(code: str) -> io.BytesIO:
 
     log_info(f"Gerando planilha Excel hierárquica e formatada para {code}")
 
-    print("----------------- Passei pelo get_struture_excel -------------------------------------------------------------------------")
     structure = get_structure(code=code,full=True)
     
     root = structure["data"]
-    print("----------------- Passei pelo get_struture_excel -------------------------------------------------------------------------")
     rows = []
     meta_map = {}  # Dicionário auxiliar: {componente_code: {"type": ..., "unit": ...}}
 
