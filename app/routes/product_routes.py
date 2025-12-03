@@ -104,13 +104,13 @@ def structure(
     summary="Exporta a estrutura formatada em planilha Excel (público)",
     include_in_schema=True
 )
-async def structure_excel_public(code: str, max_depth: int = 10, download: bool = False):
+async def structure_excel_public(code: str, download: bool = False):
     """
     Retorna o link clicável para download ou o arquivo Excel, conforme o parâmetro 'download'.
     """
     try:
         # Gera o arquivo Excel na memória
-        excel_file = get_structure_excel(code, max_depth)
+        excel_file = get_structure_excel(code)
         filename = f"Estrutura_{code}.xlsx"
 
         # ✅ Se for chamado com download=true, retorna o arquivo diretamente
@@ -139,9 +139,6 @@ async def structure_excel_public(code: str, max_depth: int = 10, download: bool 
     except Exception as e:
         log_error(f"Erro ao gerar planilha Excel pública de {code}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
-
 
 
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")

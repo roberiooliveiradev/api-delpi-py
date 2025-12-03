@@ -608,6 +608,109 @@ class ProductRepository(BaseRepository):
             "data": root
         }
 
+    # -------------------------------
+    # 🔹 STRUCTURE FULL (SEM LIMITE / SEM PAGINAÇÃO)
+    # -------------------------------
+    def list_structure_full(self, code: str) -> dict:
+        log_info(f"[FULL] Buscando estrutura COMPLETA de {code}")
+
+        query = """
+            WITH RECURSIVE_BOM AS (
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS componentCode,
+                    G1_QUANT AS quantity,
+                    1 AS level
+                FROM SG1010 WITH (NOLOCK)
+                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+
+                UNION ALL
+
+                SELECT 
+                    c.G1_COD,
+                    c.G1_COMP,
+                    c.G1_QUANT,
+                    p.level + 1
+                FROM SG1010 c WITH (NOLOCK)
+                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
+                WHERE c.D_E_L_E_T_ = '' 
+            )
+            SELECT 
+                rb.parentCode,
+                pdesc.B1_DESC AS parentDesc,
+                pdesc.B1_TIPO AS parentType,
+                pdesc.B1_UM AS parentUM,
+                rb.componentCode,
+                cdesc.B1_DESC AS componentDesc,
+                cdesc.B1_TIPO AS componentType,
+                cdesc.B1_UM AS componentUM,
+                rb.quantity,
+                rb.level
+            FROM RECURSIVE_BOM rb
+            LEFT JOIN SB1010 pdesc ON pdesc.B1_COD = rb.parentCode AND pdesc.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 cdesc ON cdesc.B1_COD = rb.componentCode AND cdesc.D_E_L_E_T_ = ''
+            ORDER BY rb.level, rb.parentCode, rb.componentCode;
+        """
+
+        rows = self.execute_query(query, (code,))
+        root = self._build_hierarchy(rows, code, mode="structure")
+
+        return {
+            "success": True,
+            "data": root
+        }
+
+    # -------------------------------
+    # 🔹 PARENTS FULL (SEM LIMITE / SEM PAGINAÇÃO)
+    # -------------------------------
+    def list_parents_full(self, code: str) -> dict:
+        log_info(f"[FULL] Buscando pais COMPLETOS (Where Used) de {code}")
+
+        query = """
+            WITH RECURSIVE_PARENTS AS (
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS childCode,
+                    G1_QUANT AS quantity,
+                    1 AS level
+                FROM SG1010 WITH (NOLOCK)
+                WHERE D_E_L_E_T_ = '' AND G1_COMP = ?
+
+                UNION ALL
+
+                SELECT 
+                    c.G1_COD,
+                    c.G1_COMP,
+                    c.G1_QUANT,
+                    p.level + 1
+                FROM SG1010 c WITH (NOLOCK)
+                INNER JOIN RECURSIVE_PARENTS p ON p.parentCode = c.G1_COMP
+                WHERE c.D_E_L_E_T_ = ''
+            )
+            SELECT 
+                rp.parentCode,
+                pdesc.B1_DESC AS parentDesc,
+                pdesc.B1_TIPO AS parentType,
+                pdesc.B1_UM AS parentUM,
+                rp.childCode,
+                cdesc.B1_DESC AS childDesc,
+                cdesc.B1_TIPO AS childType,
+                cdesc.B1_UM AS childUM,
+                rp.quantity,
+                rp.level
+            FROM RECURSIVE_PARENTS rp
+            LEFT JOIN SB1010 pdesc ON pdesc.B1_COD = rp.parentCode AND pdesc.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 cdesc ON cdesc.B1_COD = rp.childCode AND cdesc.D_E_L_E_T_ = ''
+            ORDER BY rp.level, rp.parentCode, rp.childCode;
+        """
+
+        rows = self.execute_query(query, (code,))
+        root = self._build_hierarchy(rows, code, mode="parents")
+
+        return {
+            "success": True,
+            "data": root
+        }
 
     # -------------------------------
     # 🔹 SUPPLIERS

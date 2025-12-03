@@ -74,19 +74,23 @@ def search_products(
         raise DatabaseConnectionError(str(e))
 
 
-def get_structure(code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
+def get_structure(code: str, max_depth: int = 10, page: int = 1, page_size: int = 50,  full: bool = False) -> dict:
     repo = ProductRepository()
     log_info(f"Buscando estrutura (CTE) paginada para {code}")
     try:
+        if full:
+            return repo.list_structure_full(code)
         return repo.list_structure(code, max_depth, page, page_size)
     except Exception as e:
         log_error(f"Erro ao listar estrutura do produto {code}: {e}")
         raise DatabaseConnectionError(str(e))
 
-def get_parents(code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
+def get_parents(code: str, max_depth: int = 10, page: int = 1, page_size: int = 50,  full: bool = False) -> dict:
     repo = ProductRepository()
     log_info(f"Buscando pais (CTE) paginados para {code}")
     try:
+        if full:
+            return repo.list_parents_full(code)
         return repo.list_parents(code, max_depth, page, page_size)
     except Exception as e:
         log_error(f"Erro ao listar produtos pai do item {code}: {e}")
@@ -226,7 +230,7 @@ def get_customers(code: str, page: int = 1, page_size: int = 50) -> dict:
         log_error(f"Erro ao listar clientes para o produto {code}: {e}")
         raise DatabaseConnectionError(str(e))
 
-def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
+def get_structure_excel(code: str) -> io.BytesIO:
     """
     Gera a planilha Excel no formato oficial DELPI:
     - Produto acabado no topo
@@ -237,7 +241,7 @@ def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
     repo = ProductRepository()
     log_info(f"Gerando planilha Excel hierárquica e formatada para {code}")
 
-    structure = repo.list_structure(code, max_depth, 1, 500)
+    structure = get_structure(code=code,full=True)
     root = structure["data"]
 
     rows = []
