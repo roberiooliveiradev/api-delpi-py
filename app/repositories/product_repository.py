@@ -608,124 +608,6 @@ class ProductRepository(BaseRepository):
             "data": root
         }
 
-    # -------------------------------
-    # 🔹 STRUCTURE FULL (SEM LIMITE / SEM PAGINAÇÃO)
-    # -------------------------------
-    def list_structure_full(self, code: str) -> dict:
-        log_info(f"[FULL] Buscando estrutura COMPLETA de {code} (max_depth=50)")
-
-        query = """
-            WITH RECURSIVE_BOM AS (
-                SELECT 
-                    G1_COD AS parentCode,
-                    G1_COMP AS componentCode,
-                    G1_QUANT AS quantity,
-                    1 AS level
-                FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
-
-                UNION ALL
-
-                SELECT 
-                    c.G1_COD AS parentCode,
-                    c.G1_COMP AS componentCode,
-                    c.G1_QUANT AS quantity,
-                    p.level + 1 AS level
-                FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p 
-                    ON p.componentCode = c.G1_COD
-                WHERE c.D_E_L_E_T_ = ''
-                  AND p.level < 50   -- limite seguro
-            )
-            SELECT 
-                rb.parentCode,
-                pdesc.B1_DESC AS parentDesc,
-                pdesc.B1_TIPO AS parentType,
-                pdesc.B1_UM AS parentUM,
-                rb.componentCode,
-                cdesc.B1_DESC AS componentDesc,
-                cdesc.B1_TIPO AS componentType,
-                cdesc.B1_UM AS componentUM,
-                rb.quantity,
-                rb.level
-            FROM RECURSIVE_BOM rb
-            LEFT JOIN SB1010 pdesc WITH (NOLOCK)
-                ON pdesc.B1_COD = rb.parentCode AND pdesc.D_E_L_E_T_ = ''
-            LEFT JOIN SB1010 cdesc WITH (NOLOCK)
-                ON cdesc.B1_COD = rb.componentCode AND cdesc.D_E_L_E_T_ = ''
-            ORDER BY rb.level, rb.parentCode, rb.componentCode;
-        """
-
-        rows = self.execute_query(query, (code,))
-        root = self._build_hierarchy(rows, code, mode="structure")
-
-        return {
-            "success": True,
-            "pageSize": None,
-            "totalPages": None,
-            "total": None,
-            "data": root
-        }
-    
-
-    # -------------------------------
-    # 🔹 PARENTS FULL (SEM LIMITE / SEM PAGINAÇÃO)
-    # -------------------------------
-    def list_parents_full(self, code: str) -> dict:
-        log_info(f"[FULL] Buscando pais COMPLETOS (Where Used) de {code} (max_depth=50)")
-
-        query = """
-            WITH RECURSIVE_PARENTS AS (
-                SELECT 
-                    G1_COD AS parentCode,
-                    G1_COMP AS childCode,
-                    G1_QUANT AS quantity,
-                    1 AS level
-                FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COMP = ?
-
-                UNION ALL
-
-                SELECT 
-                    c.G1_COD AS parentCode,
-                    c.G1_COMP AS childCode,
-                    c.G1_QUANT AS quantity,
-                    p.level + 1 AS level
-                FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_PARENTS p 
-                    ON p.parentCode = c.G1_COMP
-                WHERE c.D_E_L_E_T_ = ''
-                  AND p.level < 50   -- limite seguro
-            )
-            SELECT 
-                rp.parentCode,
-                pdesc.B1_DESC AS parentDesc,
-                pdesc.B1_TIPO AS parentType,
-                pdesc.B1_UM AS parentUM,
-                rp.childCode,
-                cdesc.B1_DESC AS childDesc,
-                cdesc.B1_TIPO AS childType,
-                cdesc.B1_UM AS childUM,
-                rp.quantity,
-                rp.level
-            FROM RECURSIVE_PARENTS rp
-            LEFT JOIN SB1010 pdesc WITH (NOLOCK)
-                ON pdesc.B1_COD = rp.parentCode AND pdesc.D_E_L_E_T_ = ''
-            LEFT JOIN SB1010 cdesc WITH (NOLOCK)
-                ON cdesc.B1_COD = rp.childCode AND cdesc.D_E_L_E_T_ = ''
-            ORDER BY rp.level, rp.parentCode, rp.childCode;
-        """
-
-        rows = self.execute_query(query, (code,))
-        root = self._build_hierarchy(rows, code, mode="parents")
-
-        return {
-            "success": True,
-            "pageSize": None,
-            "totalPages": None,
-            "total": None,
-            "data": root
-        }
 
     # -------------------------------
     # 🔹 SUPPLIERS
@@ -1451,130 +1333,44 @@ class ProductRepository(BaseRepository):
 
     def _build_hierarchy(self, rows: list[dict], root_code: str, mode: str = "structure") -> dict:
         """
-        Constrói hierarquia sem sobrescrever nós, sem perder filhos e com quantidades corretas.
+        Monta a hierarquia em formato JSON aninhado.
+        mode:
+            - "structure": monta árvore de componentes (pai → filhos)
+            - "parents": monta árvore de produtos-pai (filho → pais)
         """
+        from collections import defaultdict
 
-        items = {}               # índice global → {code: node}
-        children_map = {}        # parent → [children]
+        nodes = defaultdict(lambda: {"components": []})
+        descriptions = {}
 
-        # ---------------------------------------------------------------------
-        # PRIMEIRA PASSAGEM — montée de nós isolados e lista de ligações
-        # ---------------------------------------------------------------------
-        for r in rows:
-
-            # -------------------------------------
-            # STRUCTURE (G1_COD → G1_COMP)
-            # -------------------------------------
+        for row in rows:
             if mode == "structure":
-                parent_code = r["parentCode"]
-                child_code  = r["componentCode"]
-                qty_child   = float(r["quantity"]) if r["quantity"] else 0.0
-
-                parent_data = {
-                    "code": parent_code,
-                    "description": r["parentDesc"],
-                    "type": r["parentType"],
-                    "unit": r["parentUM"],
-                    # O produto raiz sempre qty=1, os demais podem herdar a própria quantidade existente
-                    "quantity": 1.0 if parent_code == root_code else 1.0,
-                }
-
-                child_data = {
-                    "code": child_code,
-                    "description": r["componentDesc"],
-                    "type": r["componentType"],
-                    "unit": r["componentUM"],
-                    "quantity": qty_child,
-                }
-
-            # -------------------------------------
-            # PARENTS (G1_COMP → G1_COD)
-            # -------------------------------------
+                parent = row["parentCode"]
+                child = row["componentCode"]
+                parentDesc = row.get("parentDesc") or ""
+                childDesc = row.get("componentDesc") or ""
             else:
-                parent_code = r["parentCode"]
-                child_code  = r["childCode"]
-                qty_parent  = float(r["quantity"]) if r["quantity"] else 0.0
+                # Modo 'parents'
+                parent = row["parentCode"]
+                child = row["childCode"]
+                parentDesc = row.get("parentDesc") or ""
+                childDesc = row.get("childDesc") or ""
 
-                # Aqui, no modo pais, somente o parent (pai) tem quantidade
-                parent_data = {
-                    "code": parent_code,
-                    "description": r["parentDesc"],
-                    "type": r["parentType"],
-                    "unit": r["parentUM"],
-                    "quantity": qty_parent,
-                }
+            descriptions[parent] = parentDesc
+            descriptions[child] = childDesc
 
-                child_data = {
-                    "code": child_code,
-                    "description": r["childDesc"],
-                    "type": r["childType"],
-                    "unit": r["childUM"],
-                    "quantity": 1.0,
-                }
+            nodes[parent]["code"] = parent
+            nodes[parent]["description"] = parentDesc
+            nodes[parent]["quantity"] = float(row.get("quantity", 0))
+            nodes[child]["code"] = child
+            nodes[child]["description"] = childDesc
+            nodes[child]["quantity"] = float(row.get("quantity", 0))
 
-            # -------------------------------------
-            # Merge seguro: não substitui nó, apenas atualiza atributos
-            # -------------------------------------
-            if parent_code not in items:
-                items[parent_code] = {**parent_data}
-            else:
-                items[parent_code].update(parent_data)
-
-            if child_code not in items:
-                items[child_code] = {**child_data}
-            else:
-                items[child_code].update(child_data)
-
-            # -------------------------------------
-            # Registra ligação parent → child (ou child → parent no modo pais)
-            # -------------------------------------
+            # Direção da relação
             if mode == "structure":
-                children_map.setdefault(parent_code, []).append(child_code)
+                nodes[parent]["components"].append(nodes[child])
             else:
-                children_map.setdefault(child_code, []).append(parent_code)
+                # No caso dos pais, o filho é quem contém o pai
+                nodes[child]["components"].append(nodes[parent])
 
-        # ---------------------------------------------------------------------
-        # SEGUNDA PASSAGEM — construir árvore sem compartilhamento de dicts
-        # ---------------------------------------------------------------------
-        def build_tree(node_code: str):
-            """
-            Cria um nó novo (deep copy manual) e monta filhos recursivamente
-            SEM compartilhar dicts entre níveis.
-            """
-            base = items[node_code]
-
-            node = {
-                "code": base["code"],
-                "description": base.get("description"),
-                "type": base.get("type"),
-                "unit": base.get("unit"),
-                "quantity": base.get("quantity", 1.0),
-                "components": []
-            }
-
-            # Se não tiver filhos registrados, retorna nó simples
-            if node_code not in children_map:
-                return node
-
-            # monta filhos de forma independente
-            for child_code in children_map[node_code]:
-                node["components"].append(build_tree(child_code))
-
-            return node
-
-        # ---------------------------------------------------------------------
-        # SELECIONAR RAIZ
-        # ---------------------------------------------------------------------
-        if root_code not in items:
-            # fallback caso o produto não tenha estrutura
-            return {
-                "code": root_code,
-                "description": None,
-                "type": None,
-                "unit": None,
-                "quantity": 1.0,
-                "components": []
-            }
-
-        # monta árvore completa
-        return build_tree(root_code)
+        return nodes[root_code]
