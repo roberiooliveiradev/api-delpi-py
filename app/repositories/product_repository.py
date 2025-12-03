@@ -1451,80 +1451,130 @@ class ProductRepository(BaseRepository):
 
     def _build_hierarchy(self, rows: list[dict], root_code: str, mode: str = "structure") -> dict:
         """
-        Constrói hierarquia sem perder filhos — versão correta.
+        Constrói hierarquia sem sobrescrever nós, sem perder filhos e com quantidades corretas.
         """
 
-        items = {}
+        items = {}               # índice global → {code: node}
+        children_map = {}        # parent → [children]
 
+        # ---------------------------------------------------------------------
+        # PRIMEIRA PASSAGEM — montée de nós isolados e lista de ligações
+        # ---------------------------------------------------------------------
         for r in rows:
+
+            # -------------------------------------
+            # STRUCTURE (G1_COD → G1_COMP)
+            # -------------------------------------
             if mode == "structure":
-                parent = r["parentCode"]
-                child = r["componentCode"]
+                parent_code = r["parentCode"]
+                child_code  = r["componentCode"]
+                qty_child   = float(r["quantity"]) if r["quantity"] else 0.0
 
                 parent_data = {
-                    "code": parent,
+                    "code": parent_code,
                     "description": r["parentDesc"],
                     "type": r["parentType"],
                     "unit": r["parentUM"],
-                    "quantity": 1.0,
+                    # O produto raiz sempre qty=1, os demais podem herdar a própria quantidade existente
+                    "quantity": 1.0 if parent_code == root_code else 1.0,
                 }
 
                 child_data = {
-                    "code": child,
+                    "code": child_code,
                     "description": r["componentDesc"],
                     "type": r["componentType"],
                     "unit": r["componentUM"],
-                    "quantity": float(r["quantity"]) if r["quantity"] else 0.0,
+                    "quantity": qty_child,
                 }
 
-            else:  # parents
-                parent = r["parentCode"]
-                child = r["childCode"]
+            # -------------------------------------
+            # PARENTS (G1_COMP → G1_COD)
+            # -------------------------------------
+            else:
+                parent_code = r["parentCode"]
+                child_code  = r["childCode"]
+                qty_parent  = float(r["quantity"]) if r["quantity"] else 0.0
 
+                # Aqui, no modo pais, somente o parent (pai) tem quantidade
                 parent_data = {
-                    "code": parent,
+                    "code": parent_code,
                     "description": r["parentDesc"],
                     "type": r["parentType"],
                     "unit": r["parentUM"],
-                    "quantity": float(r["quantity"]) if r["quantity"] else 0.0,
+                    "quantity": qty_parent,
                 }
 
                 child_data = {
-                    "code": child,
+                    "code": child_code,
                     "description": r["childDesc"],
                     "type": r["childType"],
                     "unit": r["childUM"],
                     "quantity": 1.0,
                 }
 
-            # --- parent merge ---
-            if parent not in items:
-                items[parent] = parent_data
-                items[parent]["components"] = []
+            # -------------------------------------
+            # Merge seguro: não substitui nó, apenas atualiza atributos
+            # -------------------------------------
+            if parent_code not in items:
+                items[parent_code] = {**parent_data}
             else:
-                items[parent].update(parent_data)
+                items[parent_code].update(parent_data)
 
-            # --- child merge ---
-            if child not in items:
-                items[child] = child_data
-                items[child]["components"] = []
+            if child_code not in items:
+                items[child_code] = {**child_data}
             else:
-                items[child].update(child_data)
-                if "components" not in items[child]:
-                    items[child]["components"] = []
+                items[child_code].update(child_data)
 
-            # --- attach ---
+            # -------------------------------------
+            # Registra ligação parent → child (ou child → parent no modo pais)
+            # -------------------------------------
             if mode == "structure":
-                items[parent]["components"].append(items[child])
+                children_map.setdefault(parent_code, []).append(child_code)
             else:
-                items[child]["components"].append(items[parent])
+                children_map.setdefault(child_code, []).append(parent_code)
 
-        # --- root fallback ---
-        return items.get(root_code, {
-            "code": root_code,
-            "description": None,
-            "type": None,
-            "unit": None,
-            "quantity": 1.0,
-            "components": []
-        })
+        # ---------------------------------------------------------------------
+        # SEGUNDA PASSAGEM — construir árvore sem compartilhamento de dicts
+        # ---------------------------------------------------------------------
+        def build_tree(node_code: str):
+            """
+            Cria um nó novo (deep copy manual) e monta filhos recursivamente
+            SEM compartilhar dicts entre níveis.
+            """
+            base = items[node_code]
+
+            node = {
+                "code": base["code"],
+                "description": base.get("description"),
+                "type": base.get("type"),
+                "unit": base.get("unit"),
+                "quantity": base.get("quantity", 1.0),
+                "components": []
+            }
+
+            # Se não tiver filhos registrados, retorna nó simples
+            if node_code not in children_map:
+                return node
+
+            # monta filhos de forma independente
+            for child_code in children_map[node_code]:
+                node["components"].append(build_tree(child_code))
+
+            return node
+
+        # ---------------------------------------------------------------------
+        # SELECIONAR RAIZ
+        # ---------------------------------------------------------------------
+        if root_code not in items:
+            # fallback caso o produto não tenha estrutura
+            return {
+                "code": root_code,
+                "description": None,
+                "type": None,
+                "unit": None,
+                "quantity": 1.0,
+                "components": []
+            }
+
+        # monta árvore completa
+        return build_tree(root_code)
