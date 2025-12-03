@@ -1078,7 +1078,7 @@ class ProductRepository(BaseRepository):
                 SG2.*,
                 SG2.G2_DESCRI AS operationDescription,
                 SG2.G2_TEMPAD AS standardTimeInHours_Thousands,
-                SG2.G2_SETUP AS setupInMinutes,
+                SG2.G2_SETUP AS setupInHours,
                 SGF.GF_COMP AS componentCode,
                 SB1.B1_DESC AS componentDescription,
                 SGF.GF_TRT AS componentSeq,
