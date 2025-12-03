@@ -230,7 +230,7 @@ def get_customers(code: str, page: int = 1, page_size: int = 50) -> dict:
 # --------------------------------------------------------------------
 # ESTRUTURA EM TABELA DE EXCEL
 # --------------------------------------------------------------------
-def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
+def get_structure_excel(code: str) -> io.BytesIO:
     """
     Gera a planilha Excel no formato oficial DELPI:
     - Produto acabado no topo

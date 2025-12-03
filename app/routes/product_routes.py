@@ -108,7 +108,6 @@ def structure(
 async def structure_excel_public(
     request: Request,
     code: str,
-    max_depth: int = Query(10, ge=1, le=50),
     format: str = Query("json", description="Use 'xlsx' para baixar o arquivo Excel")
 ):
     """
@@ -117,7 +116,7 @@ async def structure_excel_public(
     """
     try:
         # Sempre gera o arquivo (caso o usuário clique no link)
-        excel_file = get_structure_excel(code, max_depth)
+        excel_file = get_structure_excel(code)
         filename = f"Estrutura_{code}.xlsx"
 
         # ------------------------------
