@@ -69,7 +69,10 @@ Conforme apresentado nas páginas 4 e 5:
 -   **Comprimento:** Sempre em milímetros (mm). _(Página 7)_
 -   **Decape esquerdo e direito:** Expressos em milímetros e separados por barra (/). _(Páginas 8–9)_
 
-**Exemplo:** `00255/06/06` → comprimento 255mm, decape esquerdo 6mm e direito 6mm.
+**Exemplo:**
+
+-   `00255/06/06` → comprimento 255mm, decape esquerdo 6mm e direito 06mm.
+-   `00042/06/11` → comprimento 42mm, decape esquerdo 6mm e direito 11mm.
 
 ---
 

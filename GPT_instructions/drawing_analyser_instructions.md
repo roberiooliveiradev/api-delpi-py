@@ -226,13 +226,13 @@ GET /products/{code}/guide?page=1&page_size=50&max_depth=10
 
 > **A unidade de medida do tempo padrão (G2_TEMPAD) é hora/mil**
 
-> **A unidade de medida do tempo padrão (G2_SETUP) é minutos**
+> **A unidade de medida do tempo padrão (G2_SETUP) é hora**
 
 **📘 Unidade das colunas**
 
 | Coluna    | Unidade  | Obs                                                                                        |
 | --------- | -------- | ------------------------------------------------------------------------------------------ |
-| G2_SETUP  | Minutos  | Tempo gasto para preparação (Setup) do Recurso para a operação.                            |
+| G2_SETUP  | Hora     | Tempo gasto para preparação (Setup) do Recurso para a operação.                            |
 | G2_TEMPAD | Hora/Mil | Tempo Padrão de Operação. Tempo gasto nesta Operação para processamento de um Lote Padrão. |
 
 > Indicar a filial de referência **coluna G2_FILIAL**

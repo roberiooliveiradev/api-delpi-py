@@ -343,6 +343,94 @@ GET /products/10080522/structure?max_depth=10&page=1&page_size=50
 
 ---
 
+### 🔹 5.1 Estrutura em Planilha Excel (Download Público)
+
+```http
+GET /products/{code}/structure/excel
+GET /products/{code}/structure/excel?format=xlsx
+```
+
+#### 📘 Descrição
+
+Gera e disponibiliza a **estrutura formatada do produto em planilha Excel (formato oficial DELPI)**.
+
+-   Esta rota **não requer autenticação** (é pública).
+-   O arquivo é gerado dinamicamente com formatações, agrupamentos e regras visuais específicas.
+-   Existem dois modos de uso:
+    -   **Sem parâmetro `format=json`** → Retorna um JSON contendo o link público clicável para baixar o arquivo.
+    -   **Com parâmetro `format=xlsx`** → Retorna diretamente o arquivo Excel (StreamingResponse), iniciando o download.
+
+---
+
+#### 📘 Parâmetros
+
+| Nome       | Tipo | Padrão | Descrição                                             |
+| ---------- | ---- | ------ | ----------------------------------------------------- |
+| `code`     | str  | —      | Código do produto que será exportado                  |
+| `download` | bool | false  | Se `true`, força o download imediato do arquivo Excel |
+
+---
+
+#### 📘 Exemplo de Requisição
+
+```http
+GET /products/90264135/structure/excel
+```
+
+**Resposta (modo link):**
+
+```json
+{
+    "message": "Arquivo Excel gerado com sucesso!",
+    "download_url": "https://api.transformamaisdelpi.com.br/products/90264135/structure/excel?format=xlsx",
+    "html_link": "<a href=\"https://api.transformamaisdelpi.com.br/products/90264135/structure/excel?format=xlsx\" target=\"_blank\">📂 Baixar Estrutura 90264135</a>"
+}
+```
+
+**Resposta (modo download):**
+
+-   O navegador inicia automaticamente o download do arquivo `Estrutura_90264135.xlsx`.
+
+---
+
+#### 📗 Observações
+
+-   O arquivo Excel segue o **padrão de formatação DELPI**, incluindo:
+    -   Agrupamento hierárquico (Produto → Intermediário → MP)
+    -   Cores padronizadas
+    -   Fonte Arial Narrow 10
+    -   Regras visuais para destaque de MPs com unidade “PC”
+-   Cache configurado por 24h (`Cache-Control: public, max-age=86400`).
+-   Ideal para integração com agentes GPT e consultas públicas.
+
+---
+
+#### 📘 Exemplo de uso com agente GPT
+
+Usuário:
+
+> “Gerar o Excel da estrutura do produto 90264135.”
+
+Agente:
+
+> Aqui está o link para baixar o arquivo:  
+> 👉 [📂 Baixar Estrutura 90264135](https://api.transformamaisdelpi.com.br/products/90264135/structure/excel?download=true)
+
+> Ou apenas visualizar o link em JSON:  
+> [https://api.transformamaisdelpi.com.br/products/90264135/structure/excel](https://api.transformamaisdelpi.com.br/products/90264135/structure/excel)
+
+---
+
+#### 🔧 Endpoint Interno
+
+-   Implementação localizada em `product_routes.py`
+-   Função: `structure_excel_public`
+-   Tipo de retorno:
+    -   `JSONResponse` (modo link)
+    -   `StreamingResponse` (modo download)
+
+---
+
 ### 🔹 6. Produtos pais (Where Used)
 
 ```http
@@ -613,7 +701,7 @@ GET /products/10080522/guide?page=1&page_size=20
 
 | Coluna        | Unidade  | Obs                                                                                        |
 | ------------- | -------- | ------------------------------------------------------------------------------------------ |
-| **G2_SETUP**  | Minutos  | Tempo gasto para preparação (Setup) do Recurso para a operação.                            |
+| **G2_SETUP**  | Hora     | Tempo gasto para preparação (Setup) do Recurso para a operação.                            |
 | **G2_TEMPAD** | Hora/Mil | Tempo Padrão de Operação. Tempo gasto nesta Operação para processamento de um Lote Padrão. |
 
 > **A unidade de medida do tempo padrão (G2_TEMPAD) é hora/mil**

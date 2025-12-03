@@ -198,7 +198,19 @@ O agente deve:
 
 ## 🧠 2.4 Etapa 2 — OCR Hierárquico
 
-O agente deve executar OCR em camadas:
+**O agente deve recorrer à camada de imagem renderizada da página (modo híbrido), aplicando leitura visual direta dos dados gráficos.**
+
+O agente deve então:
+
+-   comparar os resultados de OCR × imagem;
+
+-   priorizar o valor visual quando houver divergência numérica;
+
+-   marcar no relatório a origem de cada valor (OCR, imagem ou ambos);
+
+-   registrar divergência como (OCR-only) ou (IMG-only) quando aplicável.
+
+Este modo híbrido é obrigatório para a tabela de materiais (BOM) e cotas dimensionais.
 
 ### ✔ 1. OCR do carimbo
 
@@ -701,7 +713,35 @@ Espaçamentos, derivações, folgas.
 
 ---
 
-## 📐 5.3 Regras de Extração de Cotas (OCR )
+## 📐 5.3 Regras de Extração de Cotas (OCR + Imagem)
+
+O agente deve executar duas leituras complementares:
+
+### 1️⃣ OCR textual:
+
+Extração de todos os números, unidades e tolerâncias da camada textual.
+
+### 2️⃣ Leitura visual (imagem):
+
+-   Interpretação dos dígitos e símbolos diretamente do desenho renderizado.
+
+-   Reconhecimento de setas, posições e unidades.
+
+A comparação OCR × imagem é obrigatória.
+
+Divergência → ERRO.
+
+Valor prevalente → Imagem, quando os caracteres numéricos forem mais precisos ou quando o OCR apresentar ambiguidade.
+
+Cada medida deve ser rotulada como:
+
+-   (OCR) → obtida apenas do texto,
+
+-   (IMG) → obtida apenas da imagem,
+
+-   (HYB) → coincidente nas duas leituras.
+
+### Após as leituras o agente deve:
 
 -   Extrair todas as cotas
 -   Validar numéricas
@@ -1073,7 +1113,7 @@ O roteiro contém:
 
 > **A unidade de medida do tempo padrão (G2_TEMPAD) é hora/mil**
 
-> **A unidade de medida do tempo padrão (G2_SETUP) é minutos**
+> **A unidade de medida do tempo padrão (G2_SETUP) é hora**
 
 Para o agente, o SG2010 é a representação oficial da produção.
 Se ele contradiz o desenho -> **erro grave.**
@@ -1557,6 +1597,20 @@ Regras do documento oficial:
 
 ## 📊 9.4 Validação da Tabela de Materiais (BOM)
 
+Quando a BOM estiver em formato gráfico ou rasterizado, o agente deve:
+
+-   Executar OCR para localizar colunas e linhas;
+
+-   Capturar imagem da tabela completa;
+
+-   Identificar os campos por posição visual (posição, código, descrição, quantidade, unidade);
+
+-   Confirmar numeração e formatação de códigos (ex.: 50xx, 1008xxxx);
+
+-   Priorizar a leitura visual em caso de divergência entre OCR e imagem.
+
+Diferenças entre OCR e imagem devem ser sinalizadas no relatório técnico.
+
 O agente deve validar:
 
 -   ✔ Estrutura
@@ -1639,6 +1693,16 @@ O agente deve validar:
 -   cota total incorreta
 -   decape incorreto
 -   dimensão crítica ausente
+
+Quando o OCR não reconhecer corretamente dígitos, símbolos ou unidades:
+
+-   o agente deve validar as cotas diretamente da imagem vetorial ou rasterizada;
+
+-   deve usar detecção de forma e padrão (ex.: setas de cota, linhas de chamada);
+
+-   deve marcar o valor como (IMG) e citar a posição gráfica (“vista A”, “detalhe C”, etc.);
+
+-   divergência entre OCR × imagem → ERRO CRÍTICO se afetar medidas principais ou decapes.
 
 ---
 
@@ -1872,9 +1936,29 @@ Ausência de qualquer requisito → ERRO.
 
 ---
 
-## 🔍 10.3 Regras EXTREMAS de Validação por Linha
+## 🔍 10.3 Regras EXTREMAS de Validação por Linha (OCR + Imagem)
 
-Para cada item da BOM do PDF, o agente deve executar:
+### Para cada linha da BOM, o agente deve:
+
+1. Extrair dados via OCR (camada de texto);
+
+2. Confirmar dados via leitura visual da imagem (colunas e números);
+
+3. Comparar OCR × imagem; divergência → ERRO CRÍTICO;
+
+4. Marcar no relatório a origem do dado (OCR, imagem ou híbrido);
+
+5. Priorizar o valor obtido visualmente quando:
+
+    - o OCR apresentar supressão de zeros, barras ou hífens;
+
+    - o código for um intermediário (50xx);
+
+    - houver unidades técnicas (mm, AWG, etc.).
+
+A leitura híbrida é **obrigatória para todos os códigos 50xx e seus componentes.**
+
+### Para cada item da BOM do PDF, o agente deve executar:
 
 -   ✔ 1. Validar existência do código no SG1010
 
@@ -2695,6 +2779,22 @@ Ao validar qualquer item, o agente deve seguir:
 
 Não pode pular etapas.
 
+### 13.8.1 Regras de Raciocínio em Modo Híbrido
+
+Durante a execução da análise híbrida (OCR + imagem):
+
+-   Toda informação deve ser extraída duas vezes (OCR e imagem).
+
+-   O agente deve comparar os resultados e documentar a origem.
+
+-   Quando os valores forem idênticos → status “coerente”.
+
+-   Quando divergirem → status “OCR-only” ou “IMG-only”.
+
+-   O agente deve sempre citar a fonte visual (página, área, coluna) no relatório.
+
+-   A imagem prevalece quando houver risco de erro dimensional.
+
 ---
 
 ## 🤖 13.9 Raciocínio Determinístico
@@ -2722,3 +2822,15 @@ Este capítulo define **como o agente pensa**, garantindo:
 -   com regras rígidas e universais
 
 ---
+
+| Código   | Descrição                          | Item | QTD   | Componente | Descrição                                  |
+| -------- | ---------------------------------- | ---- | ----- | ---------- | ------------------------------------------ |
+| 90264151 | CHICOTE DE LIGAÇAO COM TAMPA VERDE |      | 1     | 10210508   | TAMPA SUPERIOR BCS T SANTOS FRANKLIN VERDE |
+|          |                                    |      | 0,001 | 90350401   | INDUSTR TAMPA 90264151 ITEM 10000025886    |
+
+| Código   | Descrição                          | Item | QTD | Componente | Descrição                                                                                         |
+| -------- | ---------------------------------- | ---- | --- | ---------- | ------------------------------------------------------------------------------------------------- |
+| 90264151 | CHICOTE DE LIGAÇAO COM TAMPA VERDE |      | 1   | 10210508   | TAMPA SUPERIOR BCS T SANTOS FRANKLIN VERDE                                                        |
+| 90350401 | INSUMOS UTILIZADOS TAMPA           | A3   | 1   | 10070598   | CABO PP CIRCULAR PVC/PVC 4X1,50MM2 PT PT/AL/MR/VDAR 70°C 300/500V DIAM EXT 9,00+/-0,30MM NM 247-5 |
+|          |                                    | A4   | 3   | 10080147   | TERM. FASTON 6,30X0,80 3,30-5,30MM2 ESTANHADO ENCAPSULADO GRANEL MK3 UL ROHS                      |
+|          |                                    | A5   | 3   | 10080854   | TERM. LINGUETA 6,30X0,80 1,30-2,60MM2 ESTANHADO S/ISOLACAO GRANEL CURTO UL ROHS                   |
