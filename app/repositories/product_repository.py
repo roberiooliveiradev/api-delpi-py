@@ -385,7 +385,6 @@ class ProductRepository(BaseRepository):
             "data": rows
         }
 
-
     # -------------------------------
     # 🔹 STRUCTURE (BOM)
     # -------------------------------
@@ -485,7 +484,104 @@ class ProductRepository(BaseRepository):
             "totalPages": math.ceil(len(root_components) / page_size),
             "data": root
         }
+    
+    # -------------------------------
+    # 🔹 STRUCTURE (BOM) - FULL
+    # -------------------------------
+    def list_structure_full(self, code: str):
+        """
+        Retorna a estrutura (BOM) do produto em formato hierárquico,
+        incluindo tipo de produto (B1_TIPO) e unidade de medida (B1_UM).
+        Compatível com SQL Server.
+        """
 
+        data_query = """
+            WITH RECURSIVE_BOM AS (
+                SELECT 
+                    G1_COD AS parentCode,
+                    G1_COMP AS componentCode,
+                    G1_QUANT AS quantity,
+                    1 AS level
+                FROM SG1010 WITH (NOLOCK)
+                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+
+                UNION ALL
+
+                SELECT 
+                    c.G1_COD AS parentCode,
+                    c.G1_COMP AS componentCode,
+                    c.G1_QUANT AS quantity,
+                    p.level + 1 AS level
+                FROM SG1010 c WITH (NOLOCK)
+                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
+                WHERE c.D_E_L_E_T_ = '' AND p.level < 50
+            )
+            SELECT 
+                rb.parentCode,
+                pdesc.B1_DESC AS parentDesc,
+                pdesc.B1_TIPO AS parentType,
+                pdesc.B1_UM AS parentUM,
+                rb.componentCode,
+                cdesc.B1_DESC AS componentDesc,
+                cdesc.B1_TIPO AS componentType,
+                cdesc.B1_UM AS componentUM,
+                rb.quantity,
+                rb.level
+            FROM RECURSIVE_BOM rb
+            LEFT JOIN SB1010 pdesc WITH (NOLOCK)
+                ON pdesc.B1_COD = rb.parentCode AND pdesc.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 cdesc WITH (NOLOCK)
+                ON cdesc.B1_COD = rb.componentCode AND cdesc.D_E_L_E_T_ = ''
+            ORDER BY rb.level, rb.parentCode, rb.componentCode;
+        """
+
+        rows = self.execute_query(data_query, (code,))
+
+        # Monta estrutura hierárquica
+        items = {}
+        for r in rows:
+            comp = {
+                "code": r["componentCode"],
+                "description": r["componentDesc"],
+                "type": r["componentType"],
+                "unit": r["componentUM"],
+                "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
+                "components": []
+            }
+
+            parent_code = r["parentCode"]
+            if parent_code not in items:
+                items[parent_code] = {
+                    "code": parent_code,
+                    "description": r["parentDesc"],
+                    "type": r["parentType"],
+                    "unit": r["parentUM"],
+                    "quantity": 1.0,
+                    "components": []
+                }
+            items[parent_code]["components"].append(comp)
+            items[comp["code"]] = comp
+
+        root = items.get(code, {
+            "code": code,
+            "description": None,
+            "type": None,
+            "unit": None,
+            "quantity": 1.0,
+            "components": []
+        })
+
+        # Paginação somente no nível raiz
+        root_components = [items[c["code"]] for c in root["components"]] if "components" in root else []
+
+        return {
+            "success": True,
+            "total": len(root_components),
+            "page": None,
+            "pageSize": None,
+            "totalPages": None,
+            "data": root
+        }
 
 
     # -------------------------------

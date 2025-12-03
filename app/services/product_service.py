@@ -226,6 +226,10 @@ def get_customers(code: str, page: int = 1, page_size: int = 50) -> dict:
         log_error(f"Erro ao listar clientes para o produto {code}: {e}")
         raise DatabaseConnectionError(str(e))
 
+
+# --------------------------------------------------------------------
+# ESTRUTURA EM TABELA DE EXCEL
+# --------------------------------------------------------------------
 def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
     """
     Gera a planilha Excel no formato oficial DELPI:
@@ -237,92 +241,68 @@ def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
     repo = ProductRepository()
     log_info(f"Gerando planilha Excel hierárquica e formatada para {code}")
 
-    structure = repo.list_structure(code, max_depth, 1, 500)
+    # structure = repo.list_structure(code, max_depth, 1, 500)
+    structure = repo.list_structure_full(code)
     root = structure["data"]
 
     rows = []
     meta_map = {}  # Dicionário auxiliar: {componente_code: {"type": ..., "unit": ...}}
 
     # ---------------------------------------------------------------------
-    # Adiciona o produto pai principal APENAS se não tiver MPs diretas
+    # Cabeçalho do produto pai (sempre aparece como 1ª linha)
     # ---------------------------------------------------------------------
-    has_direct_components = any(
-        (c.get("type") == "MP" or c.get("type") in ["PI", "PA"])
-        for c in root.get("components", [])
-    )
+    # 🔧 Só cria a linha do PA raiz se NÃO houver MP direta
+    has_direct_mp = any(c.get("type") == "MP" for c in root.get("components", []))
 
-    if not has_direct_components:
+    if not has_direct_mp:
         rows.append([
             root.get("code", ""),
             root.get("description", ""),
-            "",  # Item vazio
-            "",  # QTD vazio
-            "",  # Componente vazio
-            "",  # Descrição (componente) vazia
+            "",
+            "",
+            "",
+            "",
             root.get("type", ""),
             root.get("unit", "")
         ])
 
 
     # ---------------------------------------------------------------------
-    # Função recursiva para processar os componentes e intermediários
+    # Função recursiva:
+    # - PA/PI funcionam apenas como "pai" (Código / Descrição)
+    # - SOMENTE MPs ocupam Item, QTD, Componente, Descrição (componente)
     # ---------------------------------------------------------------------
-    def process_components(parent_code, parent_desc, components):
-        """Adiciona componentes e intermediários com agrupamento correto (sem duplicação)."""
+    def process_components(parent_code: str, parent_desc: str, components: list[dict]):
         for comp in components:
             code_comp = comp.get("code", "")
             desc_comp = comp.get("description", "")
-            comp_item = comp.get("item", "")
-            comp_qtd = comp.get("quantity", "")
             comp_type = comp.get("type", "")
             comp_unit = comp.get("unit", "")
 
-            # Identificação de intermediário e matéria-prima via campo type
-            if comp_type in ["PI", "PA"]:  # Produto intermediário OU produto acabado filho
-                if comp.get("components"):
-                    # Processa todos os filhos (diretos e indiretos)
-                    for child in comp["components"]:
-                        child_code = child.get("code", "")
-                        child_desc = child.get("description", "")
-                        child_item = child.get("item", "")
-                        child_qtd = child.get("quantity", "")
-                        child_type = child.get("type", "")
-                        child_unit = child.get("unit", "")
+            if comp_type == "MP":
+                # Linha de saída: pai = PA/PI imediato (ou o próprio PA raiz se MP direta)
+                comp_item = comp.get("item", "")
+                comp_qtd = comp.get("quantity", "")
 
-                        # Adiciona o próprio filho
-                        rows.append([
-                            code_comp,
-                            desc_comp,
-                            child_item,
-                            child_qtd,
-                            child_code,
-                            child_desc,
-                            child_type,
-                            child_unit
-                        ])
-                        meta_map[child_code] = {"type": child_type, "unit": child_unit}
-
-                        # 🔁 Recursivamente adiciona os subcomponentes
-                        if child.get("components"):
-                            process_components(child_code, child_desc, child["components"])
-
-            else:
-                # Componentes diretos (MP)
                 rows.append([
-                    parent_code,
-                    parent_desc,
-                    comp_item,
-                    comp_qtd,
-                    code_comp,
-                    desc_comp,
+                    parent_code,      # Código do PA/PI agrupador
+                    parent_desc,      # Descrição do PA/PI agrupador
+                    comp_item,        # Item (apenas MP)
+                    comp_qtd,         # QTD (apenas MP, será tratada depois)
+                    code_comp,        # Código da MP
+                    desc_comp,        # Descrição da MP
                     comp_type,
-                    comp_unit
+                    comp_unit,
                 ])
                 meta_map[code_comp] = {"type": comp_type, "unit": comp_unit}
 
+            else:
+                # PA / PI → desce um nível e usa este como novo "pai"
+                if comp.get("components"):
+                    process_components(code_comp, desc_comp, comp["components"])
 
     if root.get("components"):
-        process_components(root["code"], root["description"], root["components"])
+        process_components(root.get("code", ""), root.get("description", ""), root["components"])
 
     # ---------------------------------------------------------------------
     # Geração da coluna "Item" (A, B, C... fixo por componente)
@@ -346,11 +326,12 @@ def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
 
     for r in rows:
         comp_code = r[4]
-        if comp_code not in item_map:
-            item_map[comp_code] = generate_item_label(item_counter)
-            item_counter += 1
-        # Atribui o item à posição 2 (coluna Item)
-        r[2] = item_map[comp_code]
+        if comp_code:
+            if comp_code not in item_map:
+                item_map[comp_code] = generate_item_label(item_counter)
+                item_counter += 1
+            # Atribui o item à posição 2 (coluna Item) somente para linhas de MP
+            r[2] = item_map[comp_code]
 
     # ---------------------------------------------------------------------
     # Criação da planilha Excel
@@ -411,6 +392,7 @@ def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
 
     # ---------------------------------------------------------------------
     # Aplicar ajustes de quantidade e formatação de fonte
+    # (somente linhas de MP, pois só elas têm componente e meta_map)
     # ---------------------------------------------------------------------
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=len(headers)):
         qtd_cell = row[3].value
@@ -425,22 +407,20 @@ def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
         except Exception:
             qtd = 0
 
-        # 🔧 Ajuste de quantidade conforme unidade
-
-        if comp_unit == "PC" :
-            if qtd % 1000 != 0 :
-                qtd = 1 
+        # ❗ SE NÃO É MP → NÃO ALTERA QTD, NÃO PINTA, NÃO FORMATA
+        if not (comp_code == "" or comp_code not in meta_map):
+            # 🔧 Ajuste de quantidade conforme unidade (somente MP)
+            if comp_unit == "PC":
+                if qtd % 1000 != 0:
+                    qtd = 1
+                else:
+                    qtd = qtd / 1000
             else:
-                qtd = qtd/1000
-        elif comp_unit == "MI" and comp_type in ["PI", "PA"]:
-            qtd = qtd
-        else:
-            qtd = 1
+                qtd = 1
 
-        # Atualiza célula da planilha
-        row[3].value = qtd
+            row[3].value = qtd
 
-        # Aplica cor base azul (identificação visual padrão)
+        # 🔵 Cor base azul
         for c in row[0:6]:
             c.font = blue_font
 
@@ -449,7 +429,6 @@ def get_structure_excel(code: str, max_depth: int = 10) -> io.BytesIO:
             for c in row[2:6]:
                 c.font = red_font
 
-        
 
     stream = io.BytesIO()
     wb.save(stream)
