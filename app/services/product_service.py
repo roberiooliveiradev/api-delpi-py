@@ -238,12 +238,14 @@ def get_structure_excel(code: str) -> io.BytesIO:
     - Componentes formatados conforme norma
     - Fonte vermelha somente para matérias-primas (MP) com unidade PC e QTD > 2 (em milheiro)
     """
-    repo = ProductRepository()
+
     log_info(f"Gerando planilha Excel hierárquica e formatada para {code}")
 
+    print("----------------- Passei pelo get_struture_excel -------------------------------------------------------------------------")
     structure = get_structure(code=code,full=True)
+    
     root = structure["data"]
-
+    print("----------------- Passei pelo get_struture_excel -------------------------------------------------------------------------")
     rows = []
     meta_map = {}  # Dicionário auxiliar: {componente_code: {"type": ..., "unit": ...}}
 

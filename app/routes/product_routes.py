@@ -104,16 +104,17 @@ def structure(
     summary="Exporta a estrutura formatada em planilha Excel (público)",
     include_in_schema=True
 )
-async def structure_excel_public(code: str, download: bool = False):
+async def structure_excel_public(
+    code: str,
+    download: bool = Query(False, description="Se true, baixa o arquivo diretamente")
+):
     """
     Retorna o link clicável para download ou o arquivo Excel, conforme o parâmetro 'download'.
     """
     try:
-        # Gera o arquivo Excel na memória
         excel_file = get_structure_excel(code)
         filename = f"Estrutura_{code}.xlsx"
 
-        # ✅ Se for chamado com download=true, retorna o arquivo diretamente
         if download:
             return StreamingResponse(
                 excel_file,
@@ -124,7 +125,6 @@ async def structure_excel_public(code: str, download: bool = False):
                 }
             )
 
-        # ✅ Caso contrário, retorna o link clicável
         public_url = f"https://api.transformamaisdelpi.com.br/products/{code}/structure/excel?download=true"
         html_link = f'<a href="{public_url}" target="_blank" rel="noopener noreferrer">📂 Baixar Estrutura {code}</a>'
 
@@ -139,7 +139,6 @@ async def structure_excel_public(code: str, download: bool = False):
     except Exception as e:
         log_error(f"Erro ao gerar planilha Excel pública de {code}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
 
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
 def parents(
@@ -341,8 +340,3 @@ def customers(
     except Exception as e:
         log_error(f"Erro ao consultar clientes do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
-
-
-
-
-
