@@ -996,18 +996,14 @@ class ProductRepository(BaseRepository):
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
-        
+
         offset = (page - 1) * page_size
 
-        # =====================================================
-        # 🔹 COMPONENTES: produto + componentes (SG1010)
-        # =====================================================
         log_info(
-            f"Listando roteiro de {code} e componentes (depth={max_depth}), "
+            f"Listando roteiro e componentes vinculados de {code} (depth={max_depth}), "
             f"página {page}, tamanho {page_size}"
         )
 
-        # Filtros que se aplicam à tabela SG2010
         sg2_filters = ["SG2.D_E_L_E_T_ = ''"]
         sg2_params: list = []
 
@@ -1017,103 +1013,92 @@ class ProductRepository(BaseRepository):
 
         where_clause = " AND ".join(sg2_filters)
 
-        # ------------------------
-        # Count
-        # ------------------------
+        # ==============================================================
+        # 🔹 COUNT TOTAL DE REGISTROS (SG2010 + SGF010 + SB1010 + SG1010)
+        # ==============================================================
         count_query = f"""
             WITH RECURSIVE_BOM AS (
-                SELECT 
-                    G1_COD AS parentCode,
-                    G1_COMP AS componentCode,
-                    G1_QUANT AS quantity,
-                    1 AS level
+                SELECT G1_COD AS parentCode, G1_COMP AS componentCode, 1 AS level
                 FROM SG1010 WITH (NOLOCK)
                 WHERE D_E_L_E_T_ = '' AND G1_COD = ?
 
                 UNION ALL
 
-                SELECT 
-                    c.G1_COD,
-                    c.G1_COMP,
-                    c.G1_QUANT,
-                    p.level + 1
+                SELECT c.G1_COD, c.G1_COMP, p.level + 1
                 FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p 
-                    ON p.componentCode = c.G1_COD
+                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
                 WHERE c.D_E_L_E_T_ = '' AND p.level < ?
             ),
             CODES AS (
-                -- Produto raiz
                 SELECT ? AS productCode, 0 AS level
                 UNION
-                -- Componentes do BOM
-                SELECT DISTINCT componentCode AS productCode, level
-                FROM RECURSIVE_BOM
+                SELECT DISTINCT componentCode AS productCode, level FROM RECURSIVE_BOM
             )
             SELECT COUNT(*) AS total
             FROM SG2010 AS SG2
-            INNER JOIN CODES
-                ON CODES.productCode = SG2.G2_PRODUTO
+            INNER JOIN CODES ON CODES.productCode = SG2.G2_PRODUTO
+            LEFT JOIN SGF010 AS SGF
+                ON SGF.GF_FILIAL = SG2.G2_FILIAL
+            AND SGF.GF_PRODUTO = SG2.G2_PRODUTO
+            AND SGF.GF_ROTEIRO = SG2.G2_CODIGO
+            AND SGF.GF_OPERAC = SG2.G2_OPERAC
+            AND SGF.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 AS SB1
+            ON SB1.B1_COD = SGF.GF_COMP
+            AND SB1.D_E_L_E_T_ = ''
             WHERE {where_clause}
         """
+
         count_params = [code, max_depth, code] + sg2_params
         total_row = self.execute_one(count_query, tuple(count_params))
         total_rows = int(total_row["total"] or 0)
 
-        # ------------------------
-        # Dados paginados
-        # ------------------------
+        # ==============================================================
+        # 🔹 CONSULTA PRINCIPAL: OPERAÇÕES + COMPONENTES + DESCRIÇÃO (SG2010 + SGF010 + SB1010)
+        # ==============================================================
         data_query = f"""
             WITH RECURSIVE_BOM AS (
-                SELECT 
-                    G1_COD AS parentCode,
-                    G1_COMP AS componentCode,
-                    G1_QUANT AS quantity,
-                    1 AS level
+                SELECT G1_COD AS parentCode, G1_COMP AS componentCode, 1 AS level
                 FROM SG1010 WITH (NOLOCK)
                 WHERE D_E_L_E_T_ = '' AND G1_COD = ?
 
                 UNION ALL
 
-                SELECT 
-                    c.G1_COD,
-                    c.G1_COMP,
-                    c.G1_QUANT,
-                    p.level + 1
+                SELECT c.G1_COD, c.G1_COMP, p.level + 1
                 FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p 
-                    ON p.componentCode = c.G1_COD
+                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
                 WHERE c.D_E_L_E_T_ = '' AND p.level < ?
             ),
             CODES AS (
-                SELECT 
-                    ? AS productCode,
-                    NULL AS parentCode,
-                    0 AS level
-
+                SELECT ? AS productCode, NULL AS parentCode, 0 AS level
                 UNION ALL
-
-                SELECT 
-                    DISTINCT componentCode AS productCode,
-                    parentCode,
-                    level
-                FROM RECURSIVE_BOM
+                SELECT DISTINCT componentCode AS productCode, parentCode, level FROM RECURSIVE_BOM
             )
-
             SELECT 
                 SG2.*,
-                CODES.parentCode,
+                SG2.G2_DESCRI AS operationDescription,
+                SG2.G2_TEMPAD AS standardTimeInHours_Thousands,
+                SG2.G2_SETUP AS setupInMinutes,
+                SGF.GF_COMP AS componentCode,
+                SB1.B1_DESC AS componentDescription,
+                SGF.GF_TRT AS componentSeq,
                 CODES.level AS bomLevel
             FROM SG2010 AS SG2
-            INNER JOIN CODES
-                ON CODES.productCode = SG2.G2_PRODUTO
+            INNER JOIN CODES ON CODES.productCode = SG2.G2_PRODUTO
+            LEFT JOIN SGF010 AS SGF
+                ON SGF.GF_FILIAL = SG2.G2_FILIAL
+            AND SGF.GF_PRODUTO = SG2.G2_PRODUTO
+            AND SGF.GF_ROTEIRO = SG2.G2_CODIGO
+            AND SGF.GF_OPERAC = SG2.G2_OPERAC
+            AND SGF.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 AS SB1
+            ON SB1.B1_COD = SGF.GF_COMP
+            AND SB1.D_E_L_E_T_ = ''
             WHERE {where_clause}
-            ORDER BY 
-                CODES.level,        -- nível no BOM (0 = produto pai)
-                SG2.G2_PRODUTO,
-                SG2.G2_OPERAC
+            ORDER BY CODES.level, SG2.G2_PRODUTO, SG2.G2_OPERAC, SGF.GF_TRT
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
+
         data_params = [code, max_depth, code] + sg2_params + [offset, page_size]
         rows = self.execute_query(data_query, tuple(data_params))
 
@@ -1123,10 +1108,7 @@ class ProductRepository(BaseRepository):
             "page": page,
             "pageSize": page_size,
             "totalPages": (total_rows + page_size - 1) // page_size,
-            "filters": {
-                "branch": branch,
-                "max_depth": max_depth
-            },
+            "filters": {"branch": branch, "max_depth": max_depth},
             "data": rows
         }
 
