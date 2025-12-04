@@ -55,22 +55,22 @@ async def query_tables(request: Request, req: DataQueryRequestOpenAPI):
         log_error(f"Erro ao executar consulta dinâmica: {e}")
         return error_response(str(e))
 
-
 @router.post(
     "/sql",
     summary="Executa SQL puro (somente SELECT, com CTE e recursivo permitido).",
     response_class=JSONResponse,
 )
 async def execute_sql_raw(
-    request: Request,
     body: str = Body(
         ...,
         media_type="text/plain",
-        description="Cole aqui o SQL completo, com quebras de linha e tabs (text/plain).",
-        examples={
-            "CTE Recursiva": {
-                "summary": "Exemplo com WITH RECURSIVE",
-                "value": """WITH RECURSIVE hierarchy AS (
+        description="Cole aqui o SQL completo, com quebras de linha e tabs (tipo text/plain).",
+        openapi_extra={
+            "examples": [
+                {
+                    "summary": "Exemplo com CTE recursiva",
+                    "description": "Consulta hierárquica com WITH RECURSIVE (ou WITH para SQL Server).",
+                    "value": """WITH hierarchy AS (
     SELECT B1_COD, B1_GRUPO, 0 AS LEVEL
     FROM SB1010
     WHERE B1_GRUPO = '1008'
@@ -80,8 +80,9 @@ async def execute_sql_raw(
     JOIN hierarchy h ON p.B1_GRUPO = h.B1_COD
 )
 SELECT * FROM hierarchy;"""
-            }
-        }
+                }
+            ]
+        },
     ),
 ):
     """
