@@ -120,3 +120,8 @@ class DataQueryRequestOpenAPI(BaseModel):
 
 
 DataQueryRequest.model_rebuild()
+
+class RawSqlRequest(BaseModel):
+    sql: str = Field(..., description="Instrução SQL bruta (pode conter quebras de linha).",
+                     json_schema_extra={"format": "textarea"},
+                     )
