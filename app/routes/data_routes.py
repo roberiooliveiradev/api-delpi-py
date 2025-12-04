@@ -55,44 +55,29 @@ async def query_tables(request: Request, req: DataQueryRequestOpenAPI):
         log_error(f"Erro ao executar consulta dinâmica: {e}")
         return error_response(str(e))
 
+
 @router.post(
     "/sql",
     summary="Executa SQL puro (somente SELECT, com CTE e recursivo permitido).",
     response_class=JSONResponse,
 )
-async def execute_sql_raw(
-    body: str = Body(
-        ...,
-        media_type="text/plain",
-        description="Cole aqui o SQL completo, com quebras de linha e tabs (tipo text/plain).",
-        openapi_extra={
-            "examples": [
-                {
-                    "summary": "Exemplo com CTE recursiva",
-                    "description": "Consulta hierárquica com WITH RECURSIVE (ou WITH para SQL Server).",
-                    "value": """WITH hierarchy AS (
-    SELECT B1_COD, B1_GRUPO, 0 AS LEVEL
-    FROM SB1010
-    WHERE B1_GRUPO = '1008'
-  UNION ALL
-    SELECT p.B1_COD, p.B1_GRUPO, h.LEVEL + 1
-    FROM SB1010 p
-    JOIN hierarchy h ON p.B1_GRUPO = h.B1_COD
-)
-SELECT * FROM hierarchy;"""
-                }
-            ]
-        },
-    ),
-):
+async def execute_sql_raw(request: Request):
     """
     Recebe SQL puro (text/plain) — permite colar a query completa no Swagger com quebras de linha.
     """
     try:
-        result = run_raw_sql(body)
+        # ✅ Força leitura bruta do corpo como texto (corrige AttributeError)
+        sql_text = (await request.body()).decode("utf-8").strip()
+
+        if not sql_text:
+            return error_response("Corpo vazio — nenhum SQL foi recebido.")
+
+        result = run_raw_sql(sql_text)
         if result.get("success"):
             return success_response(data=result, message="Consulta SQL executada com sucesso.")
         else:
             return error_response(result.get("message", "Erro na execução."))
     except Exception as e:
+        log_error(f"[DATA_SQL] Erro inesperado: {e}")
         return error_response(str(e))
+
