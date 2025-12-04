@@ -60,7 +60,19 @@ async def query_tables(request: Request, req: DataQueryRequestOpenAPI):
     "/sql",
     summary="Executa SQL puro (somente SELECT, com CTE e recursivo permitido).",
     response_class=JSONResponse,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "text/plain": {
+                    "schema": {"type": "string"},
+                    "example": "SELECT TOP 3 * FROM SB1010 WHERE D_E_L_E_T_ = '';"
+                }
+            }
+        }
+    },
 )
+
 async def execute_sql_raw(request: Request):
     """
     Recebe SQL puro (text/plain) — permite colar a query completa no Swagger com quebras de linha.
