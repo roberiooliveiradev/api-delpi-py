@@ -171,9 +171,9 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-# 📗 Exemplos de solicitações
+## 📗 Exemplos de solicitações
 
-## 1. Usuário: "Listar produtos programados para produzir hoje"
+### 1. Usuário: "Listar produtos programados para produzir hoje"
 
 🧱 Tabelas envolvidas
 
@@ -256,7 +256,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 > Substitua no filtro de "H8.H8_DTINI": { "op": "=", "value": "20251126" } pela data atualizada.
 
-## 2. Usuário: "Listar OPs (ordens de produção) finalizadas hoje"
+### 2. Usuário: "Listar OPs (ordens de produção) finalizadas hoje"
 
 🧱 Tabelas envolvidas:
 
@@ -353,7 +353,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 }
 ```
 
-## 3. Usuário: "Listar OPs programadas em aberto (não finalizadas) de hoje"
+### 3. Usuário: "Listar OPs programadas em aberto (não finalizadas) de hoje"
 
 🧱 Tabelas envolvidas:
 
@@ -447,7 +447,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 }
 ```
 
-## 4. Usuário: "Liste as OPs distintas em aberto."
+### 4. Usuário: "Liste as OPs distintas em aberto."
 
 🧱 Tabelas envolvidas
 
@@ -509,7 +509,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 }
 ```
 
-## 5. Usuário: "Agrupar as ordens por centro de trabalho (CT) e contar finalizadas e não finalizadas."
+### 5. Usuário: "Agrupar as ordens por centro de trabalho (CT) e contar finalizadas e não finalizadas."
 
 🧱 Tabelas envolvidas
 
@@ -577,7 +577,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 }
 ```
 
-## 6. Usuário: “Identificar componentes sem empenho registrado (travamento de produção) para um CT específico”
+### 6. Usuário: “Identificar componentes sem empenho registrado (travamento de produção) para um CT específico”
 
 🧱 Tabelas envolvidas
 
@@ -645,7 +645,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 }
 ```
 
-## 7. Usuário: “Identificar ordens finalizadas sem consumo de componentes”
+### 7. Usuário: “Identificar ordens finalizadas sem consumo de componentes”
 
 🧱 Tabelas envolvidas
 
@@ -740,7 +740,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 }
 ```
 
-## 8. Usuário: "Média de tempo por CT (H8_HRINI → H8_HRFIM)"
+### 8. Usuário: "Média de tempo por CT (H8_HRINI → H8_HRFIM)"
 
 🧱 Tabelas envolvidas
 
@@ -812,7 +812,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 > Atenção: as colunas de horas no TOTVS são no formato texto HH:MM por isso é necessário usar o CAST
 
-## 9. Usuário: "Estoque total por filial/local – Grupo 1008 CABO"
+### 9. Usuário: "Estoque total por filial/local – Grupo 1008 CABO"
 
 🧱 Tabelas envolvidas
 
@@ -865,9 +865,9 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-## Exemplos básicos de funcionalidades:
+### Exemplos básicos de funcionalidades:
 
-### 🟦 Exemplo 1 — Consulta simples com paginação
+#### 🟦 Exemplo 1 — Consulta simples com paginação
 
 ```json
 {
@@ -884,7 +884,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-### 🟩 Exemplo 2 — Join usando comparação campo–campo
+#### 🟩 Exemplo 2 — Join usando comparação campo–campo
 
 ```json
 {
@@ -901,7 +901,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-### 🟧 Exemplo 3 — CTE + comparação campo–campo
+#### 🟧 Exemplo 3 — CTE + comparação campo–campo
 
 ```json
 {
@@ -933,7 +933,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-### 🟥 Exemplo 4 — HAVING com função agregada (SQL Server way)
+#### 🟥 Exemplo 4 — HAVING com função agregada (SQL Server way)
 
 ```json
 {
@@ -954,7 +954,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-### 🟨 Exemplo 5 — JOIN com múltiplas condições + tuple compare
+#### 🟨 Exemplo 5 — JOIN com múltiplas condições + tuple compare
 
 ```json
 {
@@ -978,7 +978,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-### 🟪 Exemplo 6 — Expressões SQL no WHERE
+#### 🟪 Exemplo 6 — Expressões SQL no WHERE
 
 ```json
 {
@@ -1002,7 +1002,7 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-### 🟫 Exemplo 7 — CTE final com agregação automática
+#### 🟫 Exemplo 7 — CTE final com agregação automática
 
 ```json
 {
@@ -1024,13 +1024,13 @@ Todos os campos são opcionais, exceto `tables` e `columns`.
 
 ---
 
-# 🧱 Regras importantes
+## 🧱 Regras importantes
 
-## ✔ 1. **CTEs não paginam**
+### ✔ 1. **CTEs não paginam**
 
 A paginação funciona **somente no SELECT final**.
 
-## ✔ 2. **SQL Server não aceita alias no HAVING**
+### ✔ 2. **SQL Server não aceita alias no HAVING**
 
 Deve-se usar sempre:
 
@@ -1046,11 +1046,11 @@ Portanto no JSON:
 }
 ```
 
-## ✔ 3. **Paginações só ocorrem se existir ORDER BY**
+### ✔ 3. **Paginações só ocorrem se existir ORDER BY**
 
 Sem ORDER BY → sem OFFSET/FETCH.
 
-## ✔ 4. **Comparações campo–campo**
+### ✔ 4. **Comparações campo–campo**
 
 Exemplo:
 
@@ -1058,13 +1058,13 @@ Exemplo:
 { "A.COD": { "op": "=field", "value": "B.COD" } }
 ```
 
-## ✔ 5. **SQL Expressions**
+### ✔ 5. **SQL Expressions**
 
 ```json
 "value": { "sql": "DATEADD(day,-30,GETDATE())" }
 ```
 
-## ✔ 6. **Tuple compare**
+### ✔ 6. **Tuple compare**
 
 ```json
 "A.C1,A.C2": { "op": "=tuple", "value": "B.C1,B.C2" }
@@ -1072,7 +1072,7 @@ Exemplo:
 
 ---
 
-# 📝 Notas finais
+## 📝 Notas finais
 
 -   Sempre use **funções agregadas completas no HAVING**
 -   Sempre envie **order_by** se quiser paginação
@@ -1082,3 +1082,184 @@ Exemplo:
 -   Expressões SQL são permitidas apenas como `{ "sql": "..." }`
 
 ---
+
+# 🧩 Guia de Uso da Rota `/data/sql`
+
+## 📘 Descrição
+
+A rota `/data/sql` permite a **execução direta de instruções SQL puras** (modo texto) com **validação de segurança completa**, incluindo:
+
+-   Verificação de **tabelas permitidas** (`allowed_tables.json`);
+-   Bloqueio de **comandos DML e DDL** (`UPDATE`, `DELETE`, `DROP`, etc.);
+-   Suporte a **CTEs e CTEs recursivas** (`WITH` e `WITH RECURSIVE`);
+-   Prevenção de **injeções SQL e múltiplos comandos encadeados**;
+-   Compatibilidade com **SQL Server (T-SQL)** e **PostgreSQL**.
+
+> ⚠️ Esta rota deve ser usada **apenas por agentes técnicos homologados** (nível de automação avançado).  
+> O usuário humano nunca deve visualizar ou editar diretamente o SQL enviado.
+
+---
+
+## ⚙️ Método e Endpoint
+
+| Método | Endpoint    | Autenticação         | Tipo de Body |
+| ------ | ----------- | -------------------- | ------------ |
+| `POST` | `/data/sql` | 🔐 Requer JWT válido | `text/plain` |
+
+---
+
+## 🧱 Corpo da Requisição
+
+O corpo deve conter **apenas o SQL puro**, no formato `text/plain`, sem JSON, conforme abaixo:
+
+### ✅ Exemplo correto
+
+```sql
+WITH hierarchy AS (
+    SELECT B1_COD, B1_GRUPO, 0 AS LEVEL
+    FROM SB1010
+    WHERE B1_GRUPO = '1008'
+  UNION ALL
+    SELECT p.B1_COD, p.B1_GRUPO, h.LEVEL + 1
+    FROM SB1010 p
+    JOIN hierarchy h ON p.B1_GRUPO = h.B1_COD
+)
+SELECT * FROM hierarchy;
+```
+
+### ❌ Exemplo incorreto
+
+```json
+{ "sql": "SELECT * FROM SB1010;" }
+```
+
+> A rota `/data/sql` **não aceita JSON**.  
+> O corpo deve ser enviado como **texto puro** (`Content-Type: text/plain`).
+
+---
+
+## 🧰 Recursos e Validações
+
+| Categoria                   | Comportamento                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| **Comando permitido**       | Somente `SELECT`                                                                       |
+| **CTE simples e recursiva** | Suportadas                                                                             |
+| **Tabelas**                 | Limitadas a `allowed_tables.json`                                                      |
+| **Funções SQL**             | `SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, `TRIM`, `UPPER`, `LOWER`, `CAST`, `CONVERT`, etc. |
+| **Paginação e ORDER BY**    | Controladas pelo SQL enviado                                                           |
+| **Múltiplos comandos**      | 🚫 Bloqueados (`;` detectado fora do contexto)                                         |
+| **Comentários**             | Suportados (`--` e `/* ... */`)                                                        |
+| **Banco SQL Server**        | `WITH RECURSIVE` é automaticamente ajustado para `WITH`                                |
+| **Banco PostgreSQL/MySQL**  | Suporte nativo a `WITH RECURSIVE`                                                      |
+
+---
+
+## 📈 Exemplo de Requisição
+
+```bash
+curl -X POST "http://127.0.0.1:8000/data/sql"   -H "Authorization: Bearer <TOKEN>"   -H "Content-Type: text/plain"   -d "
+WITH hierarchy AS (
+    SELECT B1_COD, B1_GRUPO, 0 AS LEVEL
+    FROM SB1010
+    WHERE B1_GRUPO = '1008'
+  UNION ALL
+    SELECT p.B1_COD, p.B1_GRUPO, h.LEVEL + 1
+    FROM SB1010 p
+    JOIN hierarchy h ON p.B1_GRUPO = h.B1_COD
+)
+SELECT * FROM hierarchy;
+"
+```
+
+---
+
+## ✅ Resposta de Sucesso
+
+```json
+{
+    "success": true,
+    "sql": "WITH hierarchy AS (...) SELECT * FROM hierarchy;",
+    "total": 37,
+    "data": [
+        { "B1_COD": "10080123", "B1_GRUPO": "1008", "LEVEL": 0 },
+        { "B1_COD": "10080125", "B1_GRUPO": "10080123", "LEVEL": 1 }
+    ]
+}
+```
+
+---
+
+## ❌ Resposta de Erro
+
+### 🚫 Comando proibido
+
+```json
+{
+    "success": false,
+    "message": "Comando proibido detectado: UPDATE"
+}
+```
+
+### 🚫 Tabela não permitida
+
+```json
+{
+    "success": false,
+    "message": "Tabela 'ZZ9999' não autorizada (fora da whitelist allowed_tables.json)."
+}
+```
+
+### 🚫 SQL encadeado
+
+```json
+{
+    "success": false,
+    "message": "⚠️ Detecção de múltiplos comandos SQL — apenas uma instrução é permitida."
+}
+```
+
+---
+
+## 🧠 Boas Práticas
+
+-   Sempre **finalize o SQL com `;`** (recomendado).
+-   Prefira `WITH` (sem `RECURSIVE`) quando estiver em ambiente SQL Server.
+-   Evite comandos longos — para relatórios complexos, use a rota `/data/query`.
+-   Utilize sempre **CTEs nomeadas claramente** (`WITH estoque_total AS (...)`).
+-   Mantenha a lista de `allowed_tables.json` atualizada conforme o ambiente Protheus.
+
+---
+
+## 🧱 Exemplo de uso interno pelo agente
+
+### 🧠 Requisição automática (modo agente)
+
+Quando o agente precisar consultar dados SQL puros:
+
+1. Verificar se o comando é um `SELECT` válido.
+2. Enviar o SQL diretamente em `text/plain` via `/data/sql`.
+3. Retornar apenas o resultado (`data` e `total`) — **nunca o SQL completo**.
+4. Caso o SQL seja rejeitado, relatar ao usuário:  
+   _“Comando rejeitado por segurança SQL. Apenas SELECTs em tabelas permitidas são aceitos.”_
+
+---
+
+## 🔐 Limitações
+
+-   Não executa `INSERT`, `UPDATE`, `DELETE` ou `ALTER`.
+-   Não suporta `GO` (batch SQL Server).
+-   Apenas uma instrução por requisição.
+-   Não executa funções de sistema (`EXEC`, `sp_...`).
+
+---
+
+## 🧾 Resumo rápido
+
+| Item                 | `/data/query`           | `/data/sql`                  |
+| -------------------- | ----------------------- | ---------------------------- |
+| Entrada              | JSON estruturado        | Texto puro                   |
+| Validação            | Estrutural (Pydantic)   | Sintática (Regex + AST leve) |
+| Tipo de consulta     | Montada via JSON        | Escrita manual pelo agente   |
+| CTEs                 | Sim                     | Sim (inclusive recursivas)   |
+| Paginação automática | Sim                     | Não (manual via SQL)         |
+| Segurança            | Alta (campos whitelist) | Alta (com validação direta)  |

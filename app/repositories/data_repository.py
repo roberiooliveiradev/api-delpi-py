@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Tuple, Optional, Set
 from pathlib import Path
 import json
 import time
-
+from app.utils.sql_validator import SqlValidator
 
 class DataRepository(BaseRepository):
     """
@@ -376,3 +376,23 @@ class DataRepository(BaseRepository):
             return t.strip(), a.strip()
         parts = table.split()
         return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], None)
+
+
+    def execute_raw_sql_safe(self, sql: str) -> dict:
+        """
+        Executa SQL bruto após validação de segurança (somente SELECTs).
+        """
+        validator = SqlValidator()
+        validator.validate(sql)
+
+        try:
+            rows = self.execute_query(sql)
+            return {
+                "success": True,
+                "sql": sql,
+                "total": len(rows),
+                "data": rows
+            }
+        except Exception as e:
+            log_error(f"[DATA_SQL] Erro ao executar SQL: {e}")
+            return {"success": False, "message": str(e)}
