@@ -1275,15 +1275,11 @@ class ProductRepository(BaseRepository):
 
 
         """
-
-        # Executa a query no banco
-        # result = self.execute_one(sql, (code, max_depth, code))
         # ============================================================
         #  Execução e tratamento do retorno
         # ============================================================
         offset = (page - 1) * page_size
         params = (code, max_depth, offset, page_size)
-        # data_json = self.execute_json(sql, params)
         result = self.execute_json(sql, params)
         total = result.get("total", 0)
         data_json = result.get("data", [])
@@ -1299,6 +1295,7 @@ class ProductRepository(BaseRepository):
             "data": data_json
         }
     
+
     # -------------------------------
     # 🔹 INSPECTION (QP6/QP7/QP8) 
     # -------------------------------
