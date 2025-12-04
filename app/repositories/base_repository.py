@@ -3,7 +3,7 @@ from app.database import get_connection
 from app.utils.logger import log_info, log_error
 from app.core.exceptions import DatabaseConnectionError
 from datetime import datetime, date
-
+import json
 class BaseRepository:
     """
     Classe base para acesso ao banco de dados SQL Server (Protheus).
@@ -70,6 +70,22 @@ class BaseRepository:
         finally:
             self.close()
 
+    def execute_json(self, query: str, params: tuple = ()) -> dict:
+        """
+        Executa uma query SQL que retorna JSON (via FOR JSON PATH).
+        Retorna o JSON já convertido para objeto Python.
+        """
+        result = self.execute_one(query, params)
+        if not result:
+            return {}
+        key = next(iter(result))  # primeira (e única) chave do dict
+        raw_json = result[key]
+        try:
+            return self._clean_json_data(json.loads(raw_json))
+        except json.JSONDecodeError:
+            return {}
+
+
     # ---------------------------
     # 🔹 Normalização de dados
     # ---------------------------
@@ -88,3 +104,35 @@ class BaseRepository:
             elif v is None:
                 row[k] = ""
         return row
+
+    def _clean_json_data(self, data):
+        """
+        Limpa e normaliza o JSON retornado do SQL Server:
+        - Remove espaços extras em strings (trim)
+        - Converte sub-blocos JSON (QP6, QP7, QP8) de string para dict/list
+        - Remove campos vazios
+        """
+        if isinstance(data, list):
+            return [self._clean_json_data(item) for item in data]
+
+        elif isinstance(data, dict):
+            cleaned = {}
+            for key, value in data.items():
+                if isinstance(value, str):
+                    value = value.strip()
+
+                    # Se o campo é JSON válido (como QP6), decodifica
+                    if value.startswith("{") or value.startswith("["):
+                        try:
+                            value = json.loads(value)
+                            value = self._clean_json_data(value)
+                        except Exception:
+                            pass  # deixa string original se não for JSON
+                elif isinstance(value, (list, dict)):
+                    value = self._clean_json_data(value)
+
+                cleaned[key] = value
+            return cleaned
+
+        else:
+            return data
