@@ -5,6 +5,8 @@ from app.utils.logger import log_info, log_error
 from typing import Optional
 from datetime import datetime
 import math
+import json
+
 class ProductRepository(BaseRepository):
     """
     Repositório responsável por consultas na tabela SG1010 (estrutura) e SB1010 (produtos).
@@ -831,6 +833,7 @@ class ProductRepository(BaseRepository):
             "data": data
         }
 
+
     # -------------------------------
     # 🔹 OUTBOUND INVOICE ITEMS (Notas Fiscais de Saída)
     # -------------------------------
@@ -1116,6 +1119,190 @@ class ProductRepository(BaseRepository):
     # 🔹 INSPECTION (QP6/QP7/QP8) 
     # -------------------------------
     def list_inspection(
+        self,
+        code: str,
+        page: int = 1,
+        page_size: int = 50,
+        max_depth: int = 10
+    ) -> dict:
+        """
+        Retorna a estrutura completa de inspeção de um produto (QP6, QP7, QP8)
+        incluindo seus componentes da árvore SG1010, em formato JSON hierárquico.
+
+        Args:
+            code (str): Código do produto principal.
+            page (int): Página da consulta (não aplicável na estrutura hierárquica).
+            page_size (int): Tamanho de página (não aplicável neste formato).
+            max_depth (int): Profundidade máxima da recursão na SG1010.
+
+        Returns:
+            dict: Estrutura JSON completa contendo produto, componentes e inspeções.
+        """
+
+        # Validações básicas
+        if not code:
+            raise ValueError("code must be provided")
+        if max_depth < 1 or max_depth > 20:
+            raise ValueError("max_depth must be between 1 and 20")
+
+        # ============================================================
+        # Query SQL única — retorna JSON hierárquico completo
+        # ============================================================
+        sql = """
+        DECLARE 
+            @code NVARCHAR(20) = ?, 
+            @depth INT = ?, 
+            @offset INT = ?, 
+            @page_size INT = ?;
+
+        WITH RECURSIVE_BOM AS (
+            SELECT 
+                G1_COD AS parentCode,
+                G1_COMP AS productCode,
+                1 AS level
+            FROM SG1010 WITH (NOLOCK)
+            WHERE D_E_L_E_T_ = '' AND G1_COD = @code
+
+            UNION ALL
+
+            SELECT 
+                C.G1_COD,
+                C.G1_COMP,
+                P.level + 1
+            FROM SG1010 C WITH (NOLOCK)
+            INNER JOIN RECURSIVE_BOM P 
+                ON P.productCode = C.G1_COD
+            WHERE C.D_E_L_E_T_ = '' 
+            AND P.level < @depth
+        ),
+        CODES AS (
+            SELECT @code AS productCode, NULL AS parentCode, 0 AS level
+            UNION ALL
+            SELECT productCode, parentCode, level FROM RECURSIVE_BOM
+        ),
+        TOTAL AS (
+            SELECT COUNT(*) AS totalCount FROM CODES
+        )
+        SELECT 
+            (
+                SELECT 
+                    (SELECT totalCount FROM TOTAL) AS total, -- total real
+                    (
+                        SELECT 
+                            CODES.productCode AS product,
+                            CODES.parentCode,
+                            CODES.level,
+
+                            -- =========================
+                            -- QP6 (Cabeçalho da Inspeção)
+                            -- =========================
+                            (
+                                SELECT
+                                    QP6.QP6_PRODUT,
+                                    QP6.QP6_REVI,
+                                    QP6.QP6_REVINV,
+                                    QP6.QP6_DESCPO,
+                                    QP6.QP6_DTCAD,
+                                    QP6.QP6_DTINI,
+                                    QP6.QP6_CADR,
+                                    QP6.QP6_PTOLER,
+                                    QP6.QP6_TIPO,
+                                    QP6.QP6_DOCOBR,
+                                    QP6.QP6_SITPRD,
+                                    QP6.QP6_DESSTP,
+                                    QP6.QP6_UNMED1
+                                FROM QP6010 QP6 WITH (NOLOCK)
+                                WHERE QP6.D_E_L_E_T_ = ''
+                                AND QP6.QP6_PRODUT = CODES.productCode
+                                FOR JSON PATH, INCLUDE_NULL_VALUES
+                            ) AS QP6,
+
+                            -- =========================
+                            -- QP7 (Ensaios Mensuráveis)
+                            -- =========================
+                            (
+                                SELECT
+                                    QP7.QP7_PRODUT,
+                                    QP7.QP7_REVI,
+                                    QP7.QP7_ENSAIO,
+                                    QP7.QP7_LABOR,
+                                    QP7.QP7_SEQLAB,
+                                    QP7.QP7_UNIMED,
+                                    QP7.QP7_MINMAX,
+                                    QP7.QP7_NOMINA,
+                                    QP7.QP7_LIE,
+                                    QP7.QP7_LSE,
+                                    QP7.QP7_LIC,
+                                    QP7.QP7_LSC,
+                                    QP7.QP7_CODREC,
+                                    QP7.QP7_OPERAC,
+                                    QP7.QP7_ENSOBR,
+                                    QP7.QP7_CERTIF
+                                FROM QP7010 QP7 WITH (NOLOCK)
+                                WHERE QP7.D_E_L_E_T_ = ''
+                                AND QP7.QP7_PRODUT = CODES.productCode
+                                FOR JSON PATH, INCLUDE_NULL_VALUES
+                            ) AS QP7,
+
+                            -- =========================
+                            -- QP8 (Ensaios Textuais)
+                            -- =========================
+                            (
+                                SELECT
+                                    QP8.QP8_PRODUT,
+                                    QP8.QP8_REVI,
+                                    QP8.QP8_ENSAIO,
+                                    QP8.QP8_LABOR,
+                                    QP8.QP8_SEQLAB,
+                                    QP8.QP8_TEXTO,
+                                    QP8.QP8_CODREC,
+                                    QP8.QP8_OPERAC,
+                                    QP8.QP8_ENSOBR,
+                                    QP8.QP8_CERTIF
+                                FROM QP8010 QP8 WITH (NOLOCK)
+                                WHERE QP8.D_E_L_E_T_ = ''
+                                AND QP8.QP8_PRODUT = CODES.productCode
+                                FOR JSON PATH, INCLUDE_NULL_VALUES
+                            ) AS QP8
+
+                        FROM CODES
+                        ORDER BY CODES.level, CODES.productCode
+                        OFFSET @offset ROWS FETCH NEXT @page_size ROWS ONLY
+                        FOR JSON PATH, INCLUDE_NULL_VALUES
+                    ) AS data
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER, INCLUDE_NULL_VALUES
+            ) AS data; -- Mantém alias fixo
+
+
+        """
+
+        # Executa a query no banco
+        # result = self.execute_one(sql, (code, max_depth, code))
+        # ============================================================
+        #  Execução e tratamento do retorno
+        # ============================================================
+        offset = (page - 1) * page_size
+        params = (code, max_depth, offset, page_size)
+        # data_json = self.execute_json(sql, params)
+        result = self.execute_json(sql, params)
+        total = result.get("total", 0)
+        data_json = result.get("data", [])
+        # ============================================================
+        #  Monta resposta final
+        # ============================================================
+        return {
+            "success": True,
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total + page_size - 1) // page_size,
+            "data": data_json
+        }
+    
+    # -------------------------------
+    # 🔹 INSPECTION (QP6/QP7/QP8) 
+    # -------------------------------
+    def list_inspection_elder(
         self,
         code: str,
         page: int = 1,
