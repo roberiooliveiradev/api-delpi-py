@@ -14,7 +14,7 @@ SERVER_URL = " http://127.0.0.1:8000/"
 
 # Instância principal do app FastAPI
 app = FastAPI(
-    title="API TOTVS Protheus",
+    title="API DELPI",
     description="API RESTful para integração com o TOTVS Protheus — compatível com agentes GPT.",
     version="1.0.0",
     contact={
