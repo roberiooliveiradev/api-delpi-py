@@ -50,7 +50,7 @@ class SqlValidator:
                 raise PermissionError(f"Comando proibido detectado: {kw}")
 
         # 🔍 Captura nomes de CTEs declaradas
-        cte_names = re.findall(r"\bWITH\s+(?:RECURSIVE\s+)?([A-Za-z0-9_]+)\s+AS\s*\(", sql, re.IGNORECASE)
+        cte_names = re.findall(r"([A-Za-z0-9_]+)\s+AS\s*\(", sql, re.IGNORECASE)
         cte_names = {n.upper() for n in cte_names}
 
         # 🔍 Extrai todas as tabelas referenciadas
