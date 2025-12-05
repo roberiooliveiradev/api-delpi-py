@@ -49,42 +49,46 @@ class SqlValidator:
             if re.search(rf"\b{kw}\b", sql_clean, re.IGNORECASE):
                 raise PermissionError(f"Comando proibido detectado: {kw}")
 
-        # 🔍 Captura nomes de CTEs declaradas
-        cte_names = re.findall(r"([A-Za-z0-9_]+)\s+AS\s*\(", sql, re.IGNORECASE)
-        cte_names = {n.upper() for n in cte_names}
+        # 🔍 Captura o bloco completo das CTEs (até o SELECT principal)
+        cte_block = ""
+        depth = 0
+        start_idx = sql.upper().find("WITH")
+        for i, ch in enumerate(sql[start_idx:], start=start_idx):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            elif depth <= 0 and sql[i:i+6].upper().startswith("SELECT"):
+                cte_block = sql[start_idx:i]
+                break
 
-        # 🔍 Extrai todas as tabelas referenciadas
+        # 🔍 Extrai nomes das CTEs
+        cte_names = set()
+        if cte_block:
+            cte_defs = re.findall(r"\b([A-Za-z0-9_]+)\s+AS\s*\(", cte_block, re.IGNORECASE)
+            cte_names = {n.upper() for n in cte_defs}
+
+        # 🔍 Extrai tabelas de FROM e JOIN
         tables = re.findall(r"\bFROM\s+([A-Za-z0-9_]+)", sql, re.IGNORECASE)
         tables += re.findall(r"\bJOIN\s+([A-Za-z0-9_]+)", sql, re.IGNORECASE)
 
         for t in tables:
             if not t:
                 continue
-            if "(" in t or ")" in t:  # subselect
+            if "(" in t or ")" in t:
                 continue
-            if t.upper() in cte_names:  # ignora referência recursiva
+            if t.upper() in cte_names:
                 continue
             if t.upper() not in self.allowed_tables:
-                raise PermissionError(
-                    f"Tabela '{t}' não autorizada (fora da whitelist allowed_tables.json)."
-                )
+                raise PermissionError(f"Tabela '{t}' não autorizada (fora da whitelist allowed_tables.json).")
 
-        # ======================================================
-        # 🚫 Impede múltiplos comandos SQL (injeções encadeadas)
-        # ======================================================
-        # Remove comentários (/* ... */ e -- ...)
+        # 🚫 Impede múltiplos comandos
         sql_no_comments = re.sub(r"(--[^\n]*|/\*.*?\*/)", "", sql, flags=re.DOTALL)
-
-        # Remove espaços em excesso e normaliza
-        sql_no_comments = sql_no_comments.strip()
-
-        # Divide por ponto e vírgula, removendo vazios
-        parts = [p.strip() for p in sql_no_comments.split(";") if p.strip()]
+        parts = [p.strip() for p in sql_no_comments.strip().split(";") if p.strip()]
 
         if len(parts) > 1:
-            raise PermissionError(
-                "⚠️ Detecção de múltiplos comandos SQL — apenas uma instrução é permitida."
-            )
+            raise PermissionError("⚠️ Detecção de múltiplos comandos SQL — apenas uma instrução é permitida.")
 
-        # ✅ Nenhum problema encontrado
         return True
+
+
