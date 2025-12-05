@@ -5,20 +5,20 @@ from app.models.product_model import Product
 from app.utils.logger import log_info, log_error
 from app.core.exceptions import BusinessLogicError, DatabaseConnectionError
 
-def get_columns_table(tableName: str) -> dict:
+def get_columns_table(tableName: str, page: int = 1, limit: int = 50) -> dict:
     """
-    Busca as colunas de tabela no Protheus via repositório.
+    Busca as colunas de uma tabela com paginação e totalização.
     """
     repo = SystemRepository()
-    log_info(f"Iniciando consulta as colunas da tabela {tableName} via repositório")
+    log_info(f"Iniciando consulta às colunas da tabela {tableName} (página {page}, limite {limit}) via repositório")
     try:
-        result = repo.get_columns_table(tableName)
+        result = repo.get_columns_table(tableName, page, limit)
         return result
     except BusinessLogicError as e:
         log_error(str(e))
         raise
     except Exception as e:
-        log_error(f"Erro inesperado ao buscar tabela {tableName}: {e}")
+        log_error(f"Erro inesperado ao buscar colunas da tabela {tableName}: {e}")
         raise DatabaseConnectionError(str(e))
 
 def get_table(tableName: str) ->dict:

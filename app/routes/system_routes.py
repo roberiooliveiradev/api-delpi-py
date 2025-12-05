@@ -50,11 +50,6 @@ def search_tables(
         log_error(f"Erro inesperado ao buscar tabelas com descrição '{description}': {e}")
         return error_response(f"Erro inesperado: {e}")
 
-
-
-
-
-
 # ----------------------------
 # 📘 1️⃣ Listagem de tabelas
 # ----------------------------
@@ -96,19 +91,28 @@ def table(tableName: str):
 # ----------------------------
 # 📘 3️⃣ Consulta colunas de tabela
 # ----------------------------
-@router.get("/tables/{tableName}/columns", summary="Consulta colunas de tabela")
-def table_columns(tableName: str):
+@router.get("/tables/{tableName}/columns", summary="Consulta colunas de tabela com paginação")
+def table_columns(
+    tableName: str,
+    page: int = Query(1, ge=1, description="Número da página"),
+    limit: int = Query(50, ge=1, le=200, description="Quantidade de registros por página")
+):
+    """
+    Retorna colunas da tabela (SX3010) com suporte à paginação, total e totalPages.
+    """
+    log_info(f"Consultando colunas da tabela {tableName} (página {page}, limite {limit})")
     try:
-        result = get_columns_table(tableName)
+        result = get_columns_table(tableName, page, limit)
         return success_response(
             data=result,
-            message="Colunas da tabela retornadas com sucesso!"
+            message=f"Colunas da tabela {tableName} retornadas com sucesso!"
         )
+    except BusinessLogicError as e:
+        log_error(f"Nenhuma coluna encontrada para '{tableName}': {e}")
+        return error_response(str(e))
     except Exception as e:
         log_error(f"Erro ao consultar colunas da tabela {tableName}: {e}")
         return error_response(f"Erro inesperado: {e}")
-
-
 
 # ----------------------------
 # 🔐 5️⃣ Login simples

@@ -45,28 +45,64 @@ class SystemRepository(BaseRepository):
             raise BusinessLogicError(f"Tabela com código '{tableName}' não encontrada.")
         return table
 
-    def get_columns_table(self, tableName: str) -> dict:
-        log_info(f"Buscando colunas da tabela {tableName}.")
-        query = """
+    def get_columns_table(self, tableName: str, page: int = 1, page_size: int = 50) -> dict:
+        """
+        Retorna as colunas da tabela (SX3010) com suporte à paginação completa:
+        inclui total de registros e total de páginas.
+        """
+        log_info(f"Buscando colunas da tabela {tableName} (página {page}, limite {page_size})...")
+
+        if page < 1:
+            page = 1
+        if page_size < 1 or page_size > 200:
+            page_size = 50
+
+        offset = (page - 1) * page_size
+
+        # 🔹 Conta total de colunas
+        count_query = """
+            SELECT COUNT(*) AS total
+            FROM SX3010 AS X3
+            INNER JOIN SX2010 AS X2
+                ON X3.X3_ARQUIVO = X2.X2_CHAVE
+            WHERE
+                X2.X2_ARQUIVO = ?
+                AND X3.D_E_L_E_T_ = ''
+                AND X2.D_E_L_E_T_ = '';
+        """
+        total_result = self.execute_query(count_query, (tableName,))
+        total = total_result[0]["total"] if total_result else 0
+
+        # 🔹 Busca paginada
+        query = f"""
             SELECT 
                 X3.*
-            FROM
-                SX3010 AS X3
-            INNER JOIN
-                SX2010 AS X2
+            FROM SX3010 AS X3
+            INNER JOIN SX2010 AS X2
                 ON X3.X3_ARQUIVO = X2.X2_CHAVE
             WHERE
                 X2.X2_ARQUIVO = ?
                 AND X3.D_E_L_E_T_ = ''
                 AND X2.D_E_L_E_T_ = ''
-            ORDER BY
-                X3.X3_ORDEM;
+            ORDER BY X3.X3_ORDEM
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY;
         """
+        columns = self.execute_query(query, (tableName, offset, page_size))
 
-        columns = self.execute_query(query, (tableName,))
         if not columns:
-            raise BusinessLogicError(f"Colunas da tabela com código '{tableName}' não encontrada.")
-        return columns
+            raise BusinessLogicError(f"Colunas da tabela '{tableName}' não encontradas.")
+
+        total_pages = (total + page_size - 1) // page_size
+
+        return {
+            "success": True,
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": total_pages,
+            "results": columns
+        }
+
 
     def search_table_for_description(self, description: str, page: int = 1, page_size: int = 20) -> dict:
         """
