@@ -124,7 +124,7 @@ Regras para notas técnicas:
 
 ## 📚 **9️⃣ Referências e Cruzamentos Internos**
 
-| Elemento                   | Regra                                              |
+| Elemento                   | Regra                                              | Exemplo                         |
 | -------------------------- | -------------------------------------------------- | ------------------------------- |
 | **Contra Peça**            | Sempre indicar código da contraparte               | Ex.: “CONTRA PEÇA 90263713”     |
 | **LMP**                    | Inserir referência cruzada com projeto             | Ex.: “LMP 099/25”               |
