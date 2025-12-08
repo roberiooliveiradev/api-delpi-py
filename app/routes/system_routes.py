@@ -3,7 +3,11 @@ from app.services.system_service import (
     get_table,
     get_tables,
     get_columns_table,
-    search_table_by_description,  # ✅ importar o novo service
+    get_table_indexes,
+    get_table_relations,
+    get_table_schema,
+    search_columns_in_table,
+    search_table_by_description, 
 )
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError, BusinessLogicError
@@ -113,6 +117,50 @@ def table_columns(
     except Exception as e:
         log_error(f"Erro ao consultar colunas da tabela {tableName}: {e}")
         return error_response(f"Erro inesperado: {e}")
+    
+# ----------------------------
+# 📘 Consulta indices
+# ----------------------------
+@router.get("/tables/{tableName}/indexes", summary="Consulta índices (SIX010)")
+def table_indexes(tableName: str):
+    try:
+        result = get_table_indexes(tableName)
+        return success_response(result, "Índices retornados com sucesso!")
+    except Exception as e:
+        return error_response(str(e))
+    
+# ----------------------------
+# 📘 Consulta relacionamentos
+# ----------------------------
+@router.get("/tables/{tableName}/relations", summary="Consulta relacionamentos (SX9010)")
+def table_relations(tableName: str):
+    try:
+        result = get_table_relations(tableName)
+        return success_response(result, "Relacionamentos retornados com sucesso!")
+    except Exception as e:
+        return error_response(str(e))
+    
+# ----------------------------
+# 📘 Consulta schema
+# ----------------------------
+@router.get("/tables/{tableName}/schema", summary="Schema completo da tabela (SX2, SX3, SIX, SX9)")
+def table_schema(tableName: str):
+    try:
+        result = get_table_schema(tableName)
+        return success_response(result, "Schema completo retornado!")
+    except Exception as e:
+        return error_response(str(e))
+
+# ----------------------------
+# 📘 Consulta schema
+# ----------------------------
+@router.get("/tables/{tableName}/columns/search", summary="Buscar colunas por texto")
+def search_columns(tableName: str, q: str = Query(..., min_length=2)):
+    try:
+        result = search_columns_in_table(tableName, q)
+        return success_response(result, f"Colunas contendo '{q}' retornadas!")
+    except Exception as e:
+        return error_response(str(e))
 
 # ----------------------------
 # 🔐 5️⃣ Login simples

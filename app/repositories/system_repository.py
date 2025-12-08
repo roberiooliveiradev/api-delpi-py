@@ -202,3 +202,100 @@ class SystemRepository(BaseRepository):
             "total_pages": (total // page_size) + (1 if total % page_size else 0),
             "data": paginated_results
         }
+
+
+    # ----------------------------------------
+    # 🔹 1. Buscar índices da tabela (SIX010)
+    # ----------------------------------------
+    def get_table_indexes(self, tableName: str) -> list[dict]:
+        log_info(f"Buscando índices da tabela {tableName}...")
+
+        query = """
+            SELECT 
+                SIX.*
+            FROM SIX010 AS SIX
+            INNER JOIN SX2010 AS SX2
+                ON SIX.INDICE = SX2.X2_CHAVE
+            WHERE 
+                SX2.X2_ARQUIVO = ?
+                AND SIX.D_E_L_E_T_ = ''
+                AND SX2.D_E_L_E_T_ = ''
+            ORDER BY SIX.ORDEM
+        """
+
+        results = self.execute_query(query, (tableName,))
+        return results
+
+
+    # ----------------------------------------
+    # 🔹 2. Buscar relacionamentos da tabela (SX9010)
+    # ----------------------------------------
+    def get_table_relations(self, tableName: str) -> list[dict]:
+        log_info(f"Buscando relacionamentos da tabela {tableName}...")
+
+        query = """
+            SELECT 
+                SX9.*
+            FROM SX9010 AS SX9
+            INNER JOIN SX2010 AS SX2
+                ON SX9.X9_DOM = SX2.X2_CHAVE
+            WHERE 
+                SX2.X2_ARQUIVO = ?
+                AND SX9.D_E_L_E_T_ = ''
+                AND SX2.D_E_L_E_T_ = ''
+            ORDER BY SX9.X9_DOM
+            """
+
+        results = self.execute_query(query, (tableName,))
+        return results
+
+
+    # ----------------------------------------
+    # 🔹 3. Buscar colunas por descrição (SX3010)
+    # ----------------------------------------
+    def search_columns(self, tableName: str, text: str) -> list[dict]:
+        log_info(f"Buscando colunas da tabela {tableName} contendo '{text}'...")
+
+        query = """
+            SELECT 
+                X3.X3_CAMPO,
+                X3.X3_NOME,
+                X3.X3_ORDEM,
+                X3.X3_TIPO,
+                X3.X3_TAMANHO,
+                X3.X3_DECIMAL
+            FROM SX3010 AS X3
+            INNER JOIN SX2010 AS X2
+                ON X3.X3_ARQUIVO = X2.X2_CHAVE
+            WHERE 
+                X2.X2_ARQUIVO = ?
+                AND X3.D_E_L_E_T_ = ''
+                AND X2.D_E_L_E_T_ = ''
+                AND (
+                    UPPER(X3.X3_CAMPO) LIKE UPPER(?) OR
+                    UPPER(X3.X3_NOME) LIKE UPPER(?)
+                )
+            ORDER BY X3.X3_ORDEM
+        """
+
+        text = f"%{text}%"
+        return self.execute_query(query, (tableName, text, text))
+
+
+    # ----------------------------------------
+    # 🔹 4. Buscar o schema completo (SX2 + SX3 + SIX + SX9)
+    # ----------------------------------------
+    def get_table_schema(self, tableName: str) -> dict:
+        log_info(f"Montando schema completo da tabela {tableName}...")
+
+        table = self.get_table(tableName)
+        columns = self.get_columns_table(tableName, 1, 500)["results"]
+        indexes = self.get_table_indexes(tableName)
+        relations = self.get_table_relations(tableName)
+
+        return {
+            "table": table,
+            "columns": columns,
+            "indexes": indexes,
+            "relations": relations
+        }

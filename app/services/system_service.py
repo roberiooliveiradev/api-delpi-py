@@ -85,3 +85,26 @@ def search_table_by_description(description: str, page: int = 1, limit: int = 20
     except Exception as e:
         log_error(f"Erro inesperado ao buscar descrição '{description}': {e}")
         raise DatabaseConnectionError(str(e))
+    
+def get_table_indexes(tableName: str):
+    repo = SystemRepository()
+    log_info(f"Service: buscando índices da tabela {tableName}")
+    return repo.get_table_indexes(tableName)
+
+
+def get_table_relations(tableName: str):
+    repo = SystemRepository()
+    log_info(f"Service: buscando relacionamentos da tabela {tableName}")
+    return repo.get_table_relations(tableName)
+
+
+def search_columns_in_table(tableName: str, text: str):
+    repo = SystemRepository()
+    log_info(f"Service: buscando colunas da tabela {tableName} contendo '{text}'")
+    return repo.search_columns(tableName, text)
+
+
+def get_table_schema(tableName: str):
+    repo = SystemRepository()
+    log_info(f"Service: montando schema completo da tabela {tableName}")
+    return repo.get_table_schema(tableName)
