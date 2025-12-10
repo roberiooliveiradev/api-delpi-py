@@ -21,7 +21,7 @@ Fontes de base:
 
 | Item                 | Regra                                                                | Observações                                                            |
 | -------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Formato de folha** | Padrão A3 horizontal ou vertical (420x297mm)                         | Margens: 10mm em todos os lados                                        |
+| **Formato de folha** | Padrão A4 horizontal ou vertical (210x297mm)                         | Margens: 10mm em todos os lados                                        |
 | **Moldura**          | Deve conter letras (A–F) e números (1–8) para referência             | Exigido em todas as folhas                                             |
 | **Logo DELPI**       | Inserido no canto inferior direito                                   | Tamanho ≥ 30mm largura                                                 |
 | **Carimbo Técnico**  | Sempre localizado na base direita                                    | Campos: Código, Descrição, Cliente, Revisão, Execução, Liberação, Data |

@@ -23,7 +23,7 @@ Cada desenho deve conter de forma obrigatória:
 
 | Elemento                | Descrição                                              | Posição / Formato            |
 | ----------------------- | ------------------------------------------------------ | ---------------------------- |
-| **Formato da folha**    | A3 horizontal padrão                                   | Moldura com margens 10mm     |
+| **Formato da folha**    | A4 horizontal padrão                                   | Moldura com margens 10mm     |
 | **Logotipo DELPI**      | Logotipo oficial no canto inferior direito             | Tamanho mínimo 30mm largura  |
 | **Carimbo Técnico**     | Campos padronizados (ver seção 2)                      | Base inferior da folha       |
 | **Tabela de Materiais** | Listagem de todos os componentes (BOM)                 | No canto inferior esquerdo   |
@@ -167,7 +167,7 @@ Todo desenho deve conter o **código completo do produto** e, quando aplicável,
 | **Código Intermediário** | Formatação e descrição conforme norma    | ✅ Padronizado    |
 | **Normas Técnicas**      | Referência às normas aplicáveis          | ✅ Citadas        |
 | **Revisão**              | Campo e histórico atualizados            | ✅ Atualizado     |
-| **Formato A3 e carimbo** | Conforme padrão DELPI                    | ✅ Ok             |
+| **Formato A4 e carimbo** | Conforme padrão DELPI                    | ✅ Ok             |
 | **Legibilidade geral**   | Texto e dimensões legíveis               | ✅ Ok             |
 
 ---

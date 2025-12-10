@@ -270,7 +270,7 @@ GET /products/{code}/inspection?page=1&page_size=50&max_depth=10
 
 | Item                                    | Ação esperada                |
 | --------------------------------------- | ---------------------------- |
-| Formato A3, margens e carimbo padrão    | Conforme norma DELPI         |
+| Formato A4, margens e carimbo padrão    | Conforme norma DELPI         |
 | Campo “Produto Novo” usado corretamente | Somente se aplicável         |
 | Logos e legendas presentes              | Conferir posição e proporção |
 | Revisão, data e nomes consistentes      | Conferir carimbo técnico     |
@@ -327,7 +327,7 @@ Usada para cruzar dados de SB1010 e SG1010:
 | **Inspeções**          | QP6 / QP7 / QP8           | ⚠️ Pendente   | Produto sem inspeções registradas                 | QP6 / QP7 / QP8        |
 | **Normas Técnicas**    | Materiais conforme padrão | ✅ OK         | CABO PVC, TERM. FASTON, ISOLADOR UL               | Normas Técnicas DELPI  |
 | **Desenho Técnico**    | Cotas e Decape            | ✅ OK         | 120±5 mm, decape 6±1 mm                           | PDF                    |
-| **Gráfico**            | Carimbo / Formato         | ✅ OK         | A3 padrão, produto novo                           | PDF                    |
+| **Gráfico**            | Carimbo / Formato         | ✅ OK         | A4 padrão, produto novo                           | PDF                    |
 | **Conclusão**          | Status Final              | 🔴 Reprovado  | Comprimentos divergentes e Criar inspeção QP6/QP7 | Checklist DELPI        |
 
 📘 _As colunas “Resultado” podem usar ícones padrão:_

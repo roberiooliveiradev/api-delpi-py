@@ -64,7 +64,7 @@ Fluxo, CTs, recursos, tempos, operação final.
 
 ### ✔ 3.5 Normas Gráficas
 
-A3, molduras, balões, BOM, cotas, decapes.
+A4, molduras, balões, BOM, cotas, decapes.
 
 ### ✔ 3.6 Código Intermediário
 
@@ -339,7 +339,7 @@ Terminal, isolador, bitola, cor, tipo de cabo
 
 Obrigatório:
 
--   A3
+-   A4
 -   Moldura
 -   Balões
 -   Correspondência BOM ↔ balões
@@ -1579,7 +1579,7 @@ Verificações cruzadas PDF × API.
 
 Regras do documento oficial:
 
--   ✔ Folha obrigatória: A3 (420 × 297 mm)
+-   ✔ Folha obrigatória: A4 (210 x 297 mm)
 -   ✔ Margens de 10 mm
 -   ✔ Moldura com coordenadas A–F e 1–8
 -   ✔ Logotipo DELPI completo
@@ -1588,7 +1588,7 @@ Regras do documento oficial:
 
 ❌ Erros que geram ERRO CRÍTICO:
 
--   Folha não A3
+-   Folha não A4
 -   Moldura ausente
 -   Carimbo ausente
 -   Logotipo incorreto ou ilegível
@@ -1856,7 +1856,7 @@ Se qualquer item não bater → ERRO CRÍTICO
 
 O agente deve validar:
 
--   ✔ Formato A3
+-   ✔ Formato A4
 -   ✔ Moldura
 -   ✔ Logotipo
 -   ✔ Carimbo
