@@ -406,6 +406,8 @@ class ProductRepository(BaseRepository):
                     1 AS level
                 FROM SG1010 WITH (NOLOCK)
                 WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+                -- Filtra apenas itens válidos pela data final
+                AND G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
 
                 UNION ALL
 
@@ -417,6 +419,8 @@ class ProductRepository(BaseRepository):
                 FROM SG1010 c WITH (NOLOCK)
                 INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
                 WHERE c.D_E_L_E_T_ = '' AND p.level < ?
+                -- Filtra novamente na recursão
+                AND c.G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
             )
             SELECT 
                 rb.parentCode,
@@ -506,6 +510,8 @@ class ProductRepository(BaseRepository):
                     1 AS level
                 FROM SG1010 WITH (NOLOCK)
                 WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+                -- Filtra apenas itens válidos pela data final
+                AND G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
 
                 UNION ALL
 
@@ -517,6 +523,8 @@ class ProductRepository(BaseRepository):
                 FROM SG1010 c WITH (NOLOCK)
                 INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
                 WHERE c.D_E_L_E_T_ = '' AND p.level < 50
+                -- Filtra novamente na recursão
+                AND c.G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
             )
             SELECT 
                 rb.parentCode,
