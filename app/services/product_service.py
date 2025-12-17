@@ -230,7 +230,7 @@ def get_customers(code: str, page: int = 1, page_size: int = 50) -> dict:
 # --------------------------------------------------------------------
 # ESTRUTURA EM TABELA DE EXCEL
 # --------------------------------------------------------------------
-def get_structure_excel(code: str) -> io.BytesIO:
+def get_structure_excel2(code: str) -> io.BytesIO:
     """
     Gera a planilha Excel no formato oficial DELPI:
     - Produto acabado no topo
@@ -430,6 +430,233 @@ def get_structure_excel(code: str) -> io.BytesIO:
                 c.font = red_font
 
 
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    return stream
+
+
+# --------------------------------------------------------------------
+# ESTRUTURA EM TABELA DE EXCEL (COM PARENT_FACTOR ACUMULATIVO)
+# --------------------------------------------------------------------
+def get_structure_excel(code: str) -> io.BytesIO:
+    """
+    Gera a planilha Excel no formato oficial DELPI:
+    - Produto acabado no topo
+    - Intermediários agrupados
+    - Matérias-primas com quantidade final acumulada
+    - parent_factor acumulativo: PA(1) → PI → MP
+    """
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from string import ascii_uppercase
+
+    repo = ProductRepository()
+    log_info(f"Gerando planilha Excel hierárquica e formatada para {code}")
+
+    structure = repo.list_structure_full(code)
+    root = structure["data"]
+
+    rows: list[list] = []
+    meta_map: dict[str, dict] = {}
+
+    # ------------------------------------------------------------------
+    # Cabeçalho do produto pai (somente se NÃO houver MP direta)
+    # ------------------------------------------------------------------
+    has_direct_mp = any(c.get("type") == "MP" for c in root.get("components", []))
+
+    if not has_direct_mp:
+        rows.append([
+            root.get("code", ""),
+            root.get("description", ""),
+            "",
+            "",
+            "",
+            "",
+            root.get("type", ""),
+            root.get("unit", ""),
+            1.0,  # parent_factor do PA raiz
+        ])
+
+    # ------------------------------------------------------------------
+    # Função recursiva com parent_factor acumulativo
+    # ------------------------------------------------------------------
+    def process_components(
+        parent_code: str,
+        parent_desc: str,
+        components: list[dict],
+        parent_factor: float = 1.0
+    ):
+        for comp in components:
+            code_comp = comp.get("code", "")
+            desc_comp = comp.get("description", "")
+            comp_type = comp.get("type", "")
+            comp_unit = comp.get("unit", "")
+            comp_qtd = float(comp.get("quantity", 1) or 1)
+
+            if comp_type == "MP":
+                rows.append([
+                    parent_code,
+                    parent_desc,
+                    comp.get("item", ""),
+                    comp_qtd,          # qtd original
+                    code_comp,
+                    desc_comp,
+                    comp_type,
+                    comp_unit,
+                    parent_factor,     # 🔑 fator acumulado
+                ])
+                meta_map[code_comp] = {"type": comp_type, "unit": comp_unit}
+
+            else:
+                # PA / PI → acumula fator e desce
+                new_parent_factor = parent_factor * comp_qtd
+                if comp.get("components"):
+                    process_components(
+                        code_comp,
+                        desc_comp,
+                        comp["components"],
+                        new_parent_factor
+                    )
+
+    if root.get("components"):
+        process_components(
+            root.get("code", ""),
+            root.get("description", ""),
+            root["components"],
+            parent_factor=1.0
+        )
+
+    # ------------------------------------------------------------------
+    # Geração da coluna Item (A, B, C...)
+    # ------------------------------------------------------------------
+    def generate_item_label(index: int) -> str:
+        letters = ""
+        while True:
+            index, remainder = divmod(index, 26)
+            letters = ascii_uppercase[remainder] + letters
+            if index == 0:
+                break
+            index -= 1
+        return letters
+
+    item_map: dict[str, str] = {}
+    item_counter = 0
+
+    for r in rows:
+        comp_code = r[4]
+        if comp_code:
+            if comp_code not in item_map:
+                item_map[comp_code] = generate_item_label(item_counter)
+                item_counter += 1
+            r[2] = item_map[comp_code]
+
+    # ------------------------------------------------------------------
+    # Criação da planilha Excel
+    # ------------------------------------------------------------------
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Estrutura DELPI"
+
+    headers = ["Código", "Descrição", "Item", "QTD", "Componente", "Descrição"]
+    ws.append(headers)
+
+    font_name = "Arial Narrow"
+    font_size = 10
+
+    thin = Side(border_style="thin", color="000000")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    header_font = Font(bold=True, color="0000FF", name=font_name, size=font_size)
+    normal_font = Font(color="000000", name=font_name, size=font_size)
+    red_font = Font(color="FF0000", name=font_name, size=font_size)
+    blue_font = Font(color="0000FF", name=font_name, size=font_size)
+
+    for col in range(1, len(headers) + 1):
+        c = ws.cell(row=1, column=col)
+        c.font = header_font
+        c.alignment = align_center
+        c.border = border
+        ws.column_dimensions[get_column_letter(col)].width = 50 if col in [2, 6] else 14
+
+    for r in rows:
+        ws.append(r[:6])
+
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=len(headers)):
+        for c in row:
+            c.border = border
+            c.alignment = align_left if c.column in [2, 6] else align_center
+            c.font = normal_font
+
+    # ------------------------------------------------------------------
+    # Mesclar Código / Descrição por agrupamento
+    # ------------------------------------------------------------------
+    current_parent = None
+    start_row = 2
+
+    for i in range(2, ws.max_row + 1):
+        parent = ws.cell(row=i, column=1).value
+        if parent != current_parent:
+            if current_parent is not None and start_row < i - 1:
+                ws.merge_cells(start_row=start_row, start_column=1, end_row=i - 1, end_column=1)
+                ws.merge_cells(start_row=start_row, start_column=2, end_row=i - 1, end_column=2)
+            start_row = i
+            current_parent = parent
+
+    if current_parent and start_row < ws.max_row:
+        ws.merge_cells(start_row=start_row, start_column=1, end_row=ws.max_row, end_column=1)
+        ws.merge_cells(start_row=start_row, start_column=2, end_row=ws.max_row, end_column=2)
+
+    # ------------------------------------------------------------------
+    # Ajuste FINAL da quantidade (MP + parent_factor)
+    # ------------------------------------------------------------------
+    for idx, row in enumerate(
+        ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=len(headers)),
+        start=0
+    ):
+        qtd_cell = row[3].value
+        comp_code = str(row[4].value or "").strip()
+
+        comp_meta = meta_map.get(comp_code)
+        if not comp_meta:
+            for c in row:
+                c.font = blue_font
+            continue
+
+        comp_unit = comp_meta["unit"]
+
+        try:
+            qtd = float(str(qtd_cell).replace(",", "."))
+        except Exception:
+            qtd = 0
+
+        parent_factor = rows[idx][8] if len(rows[idx]) > 8 else 1
+
+        if comp_unit == "PC":
+            qtd = qtd / 1000 if qtd % 1000 == 0 else 1
+        else:
+            qtd = 1
+
+        qtd_final = qtd * parent_factor
+        row[3].value = qtd_final
+
+        # 🔵 Cor base azul
+        for c in row:
+            c.font = blue_font
+
+        # 🔴 Destaque: MP + PC + QTD >= 2
+        if qtd_final >= 2:
+            for c in row[2:6]:
+                c.font = red_font
+
+    # ------------------------------------------------------------------
+    # Retorno do Excel
+    # ------------------------------------------------------------------
     stream = io.BytesIO()
     wb.save(stream)
     stream.seek(0)
