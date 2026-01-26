@@ -8,7 +8,7 @@ from app.utils.logger import log_info, log_error
 router = APIRouter()
 
 
-@router.post("/query", summary="Consulta genérica (CTE, aliases, agregações, filtros, paginação)")
+# @router.post("/query", summary="Consulta genérica (CTE, aliases, agregações, filtros, paginação)")
 async def query_tables(request: Request, req: DataQueryRequestOpenAPI):
     """
     Executa consultas dinâmicas com suporte a:
