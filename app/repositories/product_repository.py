@@ -2,7 +2,7 @@
 from app.repositories.base_repository import BaseRepository
 from app.core.exceptions import BusinessLogicError
 from app.utils.logger import log_info, log_error
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime
 import math
 import json
@@ -1590,15 +1590,62 @@ class ProductRepository(BaseRepository):
             "data": data
         }
 
-    def _convert_date_to_protheus(date_str: Optional[str]) -> Optional[str]:
+    def _convert_date_to_protheus(self, date_value: Optional[Union[str, datetime]]) -> Optional[str]:
         """
-        Converte 'YYYY-MM-DD' → 'YYYYMMDD' (padrão Protheus).
+        Converte vários formatos de data para 'YYYYMMDD' (padrão Protheus).
+
+        Formatos aceitos:
+        - datetime
+        - 'YYYY-MM-DD'
+        - 'YYYY/MM/DD'
+        - 'DD/MM/YYYY'
+        - 'DD-MM-YYYY'
+        - 'YYYYMMDD'
+        - ISO completo: 'YYYY-MM-DDTHH:MM:SS'
+        - ISO com timezone: 'YYYY-MM-DDTHH:MM:SSZ'
         """
-        if not date_str:
+
+        if not date_value:
             return None
+
+        # Caso já seja datetime
+        if isinstance(date_value, datetime):
+            return date_value.strftime("%Y%m%d")
+
+        if not isinstance(date_value, str):
+            return None
+
+        date_value = date_value.strip()
+
+        # Se já estiver no padrão Protheus
+        if date_value.isdigit() and len(date_value) == 8:
+            return date_value
+
+        # Lista de formatos conhecidos
+        known_formats = [
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+            "%d/%m/%Y",
+            "%d-%m-%Y",
+            "%Y%m%d",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%d %H:%M:%S",
+        ]
+
+        for fmt in known_formats:
+            try:
+                parsed = datetime.strptime(date_value, fmt)
+                return parsed.strftime("%Y%m%d")
+            except ValueError:
+                continue
+
+        # Tentativa final: ISO 8601 genérico (Python 3.11+ / compatível)
         try:
-            return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y%m%d")
-        except ValueError:
+            parsed = datetime.fromisoformat(date_value.replace("Z", "+00:00"))
+            return parsed.strftime("%Y%m%d")
+        except Exception:
             return None
 
     def _build_hierarchy(self, rows: list[dict], root_code: str, mode: str = "structure") -> dict:
