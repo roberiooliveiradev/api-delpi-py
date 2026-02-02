@@ -43,7 +43,7 @@ Fontes de informação:
 
 -   `/products/{code}/analyser` → **primeira escolha** (dados completos de produto + estrutura + roteiro + inspeções)
 -   `/product/*` → consultas específicas (structure, guide, inspection)
--   `/data/query` → validações cruzadas
+-   `/data/sql` → validações cruzadas
 -   Normas e arquivos drawing\_\* para interpretação técnica
 
 ---
@@ -68,7 +68,7 @@ Fontes de informação:
 ## 🔧 Regras de Execução
 
 1. **Identifique o contexto da pergunta** → produto, estrutura, tabela ou estoque.
-2. **Escolha a rota adequada** (`/product`, `/system`, `/data/query`).
+2. **Escolha a rota adequada** (`/product`, `/system`, `/data/sql`).
 3. **Confirme parâmetros obrigatórios** (ex: código do produto).
 4. **Consulte o arquivo de instruções da rota** antes de executar.
 5. **Traduza resultados** para nomes amigáveis e cite a **fonte da informação**.
@@ -142,7 +142,7 @@ _📘 Base: “Understanding DELPI Intermediate Product Codes.md” e “Drawing
 -   Consultas completas de produto ou desenho → `/products/{code}/analyser`
 -   Produtos, estruturas, pais/filhos (consultas específicas) → `/product/*`
 -   Tabelas e colunas → `/system/*`
--   Estoques, pedidos, cruzamentos → `/data/query`
+-   Estoques, pedidos, cruzamentos → `/data/sql`
 -   Padrões técnicos → **Normas Técnicas DELPI**
 -   Desenhos técnicos (PDFs) → aplicar integração com `drawing_analyser_instructions.md` validando com `validation_rules_delpi.md` e `drawing_requirements_delpi.md`
 -   Sempre verificar o guia técnico da rota antes de executar.
