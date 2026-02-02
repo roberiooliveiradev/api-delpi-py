@@ -38,10 +38,10 @@ class SqlValidator:
         sql_clean = sql.strip().upper()
 
         # ✅ Aceita "WITH" e "WITH RECURSIVE", exige SELECT final
-        if sql_clean.startswith("WITH ") or sql_clean.startswith("WITH RECURSIVE "):
+        if sql_clean.startswith("WITH") or sql_clean.startswith("WITH RECURSIVE "):
             if "SELECT" not in sql_clean:
                 raise PermissionError("CTE detectada, mas nenhuma instrução SELECT encontrada.")
-        elif not sql_clean.startswith("SELECT "):
+        elif not sql_clean.startswith("SELECT"):
             raise PermissionError("Apenas instruções SELECT ou WITH ... SELECT são permitidas.")
 
         # 🚫 Palavras proibidas
