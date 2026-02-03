@@ -701,3 +701,185 @@ WHERE
 ORDER BY
     P.B1_COD ASC;
 ```
+
+### 10. Usuário: “Buscar produtos do grupo 1050 com descrição contendo COMP e unidade diferente de peça”
+🧱 Tabelas envolvidas
+
+-   SB1010 — Cadastro de Produtos (fonte única necessária)
+
+⚙️ Condições aplicadas
+
+-   Grupo do produto = 1050
+-   Descrição do produto contém o texto COMP
+-   Unidade de medida diferente de peça (PC)
+-   Registros ativos (`D_E_L_E_T* = '' `)
+
+💾 Consulta
+
+```sql
+SELECT
+    B1_COD   AS COD_PRODUTO,
+    B1_DESC  AS DESCRICAO_PRODUTO,
+    B1_GRUPO AS GRUPO,
+    B1_UM    AS UNIDADE
+FROM SB1010
+WHERE
+        D_E_L_E_T_ = ''
+    AND B1_GRUPO = '1050'
+    AND B1_DESC LIKE '%COMP%'
+    AND B1_UM <> 'PC'
+ORDER BY
+    B1_COD;
+```
+
+### 11. Usuário: “Encontrar produtos com partnumbers duplicados para um fornecedor”
+🧱 Tabelas envolvidas
+
+-   SB1010 — Cadastro de Produtos
+
+-   SA5010 — Relacionamento Produto × Fornecedor (partnumber do fornecedor)
+
+⚙️ Condições aplicadas
+
+-   Fornecedor específico (A5_FORNECE = '001499')
+
+-   Considera somente registros ativos
+    -   `SB1010.D_E_L_E_T_ = ''`
+    -   `SA5010.D_E_L_E_T_ = ''`
+-   Identifica partnumbers duplicados por fornecedor
+    -   Mesmo A5_CODPRF associado a mais de um produto
+
+💾 Consulta
+
+```sql
+SELECT
+    P.B1_COD     AS COD_PRODUTO,
+    P.B1_DESC    AS DESCRICAO_PRODUTO,
+    F.A5_FORNECE AS COD_FORNECEDOR,
+    F.A5_NOMEFOR AS NOME_FORNECEDOR,
+    F.A5_CODPRF  AS PARTNUMBER
+FROM SB1010 P
+INNER JOIN SA5010 F
+    ON F.A5_PRODUTO = P.B1_COD
+WHERE
+        F.A5_FORNECE =  '001499'
+    AND F.D_E_L_E_T_ = ''
+    AND P.D_E_L_E_T_ = ''
+    AND F.A5_CODPRF IN (
+        SELECT
+            A5_CODPRF
+        FROM SA5010
+        WHERE
+                A5_FORNECE =  '001499'
+            AND D_E_L_E_T_ = ''
+        GROUP BY
+            A5_CODPRF
+        HAVING COUNT(*) > 1
+    )
+ORDER BY
+    F.A5_CODPRF,
+    P.B1_COD;
+```
+
+### 11. Usuário: “Buscar a última NF válida de um produto, excluindo transportadoras.”
+🧱 Tabelas envolvidas
+
+-   SD1010 — Itens de Notas Fiscais de Entrada
+
+-   SA2010 — Cadastro de Fornecedores
+
+-   SA5010 — Relacionamento Produto × Fornecedor (partnumber)
+
+⚙️ Condições aplicadas
+
+-   Produto específico
+
+    -   `SD1010.D1_COD = '10080001'`
+
+-   Considera somente registros ativos
+
+    -   `SD1010.D_E_L_E_T_ = ''`
+
+    -   `SA2010.D_E_L_E_T_ = ''`
+
+    -   `SA5010.D_E_L_E_T_ = ''`
+
+-   Exclui fornecedores internos específicos
+
+    -   `D1_FORNECE <> '000019'`
+
+    -   `D1_FORNECE <> '001149'`
+
+-   Exclui transportadoras pelo nome do fornecedor
+
+    -   `UPPER(SA2010.A2_NOME) NOT LIKE '%TRANSP%'`
+
+-   Determina a última NF por produto
+
+    -   Ordenação por:
+
+        -   Data de emissão
+
+        -   Data de digitação
+
+        -   Número da NF
+
+    -   Uso de `ROW_NUMBER()` para selecionar apenas o registro mais recente (`RN = 1`)
+
+💾 Consulta
+
+```sql
+WITH ULTIMA_NF_PRODUTO AS (
+    SELECT
+        SD1.D1_FILIAL        AS FILIAL,
+        SD1.D1_COD           AS COD_MATERIA_PRIMA,
+        A5.A5_CODPRF         AS PARTNUMBER,
+        SD1.D1_DOC           AS NF_NUMERO,
+        SD1.D1_EMISSAO       AS DATA_EMISSAO,
+        SD1.D1_DTDIGIT       AS DATA_DIGITACAO,
+        SD1.D1_FORNECE       AS FORNECEDOR_CODIGO,
+        SD1.D1_LOJA          AS FORNECEDOR_LOJA,
+        SA2.A2_NOME          AS FORNECEDOR_NOME,
+        SA2.A2_CGC           AS FORNECEDOR_CNPJ,
+        SA2.A2_EST           AS FORNECEDOR_UF,
+        ROW_NUMBER() OVER (
+            PARTITION BY SD1.D1_COD
+            ORDER BY
+                SD1.D1_EMISSAO DESC,
+                SD1.D1_DTDIGIT DESC,
+                SD1.D1_DOC DESC
+        ) AS RN
+    FROM SD1010 SD1
+    INNER JOIN SA2010 SA2
+        ON SA2.A2_COD  = SD1.D1_FORNECE
+       AND SA2.A2_LOJA = SD1.D1_LOJA
+       AND SA2.D_E_L_E_T_ = ''
+    LEFT JOIN SA5010 A5
+        ON A5.A5_PRODUTO = SD1.D1_COD
+       AND A5.A5_FORNECE = SD1.D1_FORNECE
+       AND A5.A5_LOJA    = SD1.D1_LOJA
+       AND A5.D_E_L_E_T_ = ''
+    WHERE
+            SD1.D_E_L_E_T_ = ''
+        AND SD1.D1_COD = '10080001'
+        AND SD1.D1_FORNECE <> '000019'
+        AND SD1.D1_FORNECE <> '001149'
+        AND UPPER(SA2.A2_NOME) NOT LIKE '%TRANSP%'
+)
+SELECT
+    FILIAL,
+    COD_MATERIA_PRIMA,
+    PARTNUMBER,
+    NF_NUMERO,
+    DATA_EMISSAO,
+    DATA_DIGITACAO,
+    FORNECEDOR_CODIGO,
+    FORNECEDOR_LOJA,
+    FORNECEDOR_NOME,
+    FORNECEDOR_CNPJ,
+    FORNECEDOR_UF
+FROM ULTIMA_NF_PRODUTO
+WHERE RN = 1
+ORDER BY COD_MATERIA_PRIMA;
+```
+
