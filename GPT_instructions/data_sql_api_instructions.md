@@ -883,3 +883,95 @@ WHERE RN = 1
 ORDER BY COD_MATERIA_PRIMA;
 ```
 
+### 12. Usuário: “Identificar a quantidade consumida de terminais por CT, agrupada por filial”
+
+🎯 Objetivo da consulta
+
+> Identificar a quantidade efetivamente consumida de terminais (grupo 1008) em um Centro de Trabalho específico (CT), 
+com produção real comprovada, agrupando os resultados por filial, dentro de um período definido.
+
+A consulta garante que:
+
+-   O consumo é real (não apenas planejado)
+
+-   O CT é validado via apontamento de produção
+
+-   As quantidades não são infladas por múltiplos apontamentos
+
+🧱 Tabelas envolvidas
+
+-   SD4010 — Empenhos / Consumo de materiais na OP
+
+-   SB1010 — Cadastro de produtos (terminais)
+
+-   SH6010 — Apontamentos de produção (execução real)
+
+⚙️ Condições aplicadas
+
+-   B1_GRUPO = '1008' → Apenas terminais
+
+-   H6_TIPO = 'P' → Apontamento de produção válido
+
+-   H6_RECURSO = CT informado → CT inferido pelo recurso
+
+-   Período → H6_DATAINI BETWEEN DataInicial AND DataFinal
+
+-   Agrupamento por filial (SD4.D4_FILIAL)
+
+-   Registros ativos (D_E_L_E_T_ = '')
+
+-   Quantidade consumida calculada como:
+    -   D4_QTDEORI - D4_QUANT (mesmo critério da query de golpes)
+
+💾 Consulta
+
+```sql
+SELECT
+    SD4.D4_FILIAL        AS FILIAL,
+    SD4.D4_COD           AS COD_MATERIAL,
+    SB1.B1_DESC          AS DESC_MATERIAL,
+    SB1.B1_UM            AS UNIDADE,
+    'CT-53'                  AS CT,
+    SUM(
+        CASE
+            WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
+            THEN SD4.D4_QTDEORI - SD4.D4_QUANT
+            ELSE 0
+        END
+    ) AS QTD_CONSUMIDA
+FROM SD4010 SD4
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD = SD4.D4_COD
+
+INNER JOIN (
+    SELECT DISTINCT
+        H6_FILIAL,
+        H6_OP,
+        H6_OPERAC
+    FROM SH6010
+    WHERE
+        D_E_L_E_T_ = ''
+        AND H6_TIPO = 'P'
+        AND H6_RECURSO = 'CT-53'
+        AND H6_DATAINI BETWEEN '20250101' AND '20251231'
+) SH6
+    ON SH6.H6_FILIAL = SD4.D4_FILIAL
+   AND SH6.H6_OP     = SD4.D4_OP
+   AND SH6.H6_OPERAC = SD4.D4_OPERAC
+
+WHERE
+    SD4.D_E_L_E_T_ = ''
+
+    AND SB1.D_E_L_E_T_ = ''
+    AND SB1.B1_GRUPO = '1008'
+
+GROUP BY
+    SD4.D4_FILIAL,
+    SD4.D4_COD,
+    SB1.B1_DESC,
+    SB1.B1_UM
+
+ORDER BY
+    SD4.D4_FILIAL,
+    SD4.D4_COD;
+```
