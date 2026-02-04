@@ -2,13 +2,22 @@
 
 ## 📘 Descrição
 
-A rota `/data/sql` permite a **execução direta de instruções SQL puras**, enviadas em **formato JSON**, com **validação de segurança completa**, incluindo:
+A rota `/data/sql` permite a **execução controlada de SQL puro (T-SQL)**, enviadas em **formato JSON**, com **validação de segurança completa**,
+Ela funciona como uma camada segura de leitura sobre o banco TOTVS Protheus (SQL Server), permitindo consultas avançadas sem expor DDL/DML ou risco de execução arbitrária, incluindo:
 
 -   Verificação de **tabelas permitidas** (`allowed_tables.json`);
 -   Bloqueio de **comandos DML e DDL** (`UPDATE`, `DELETE`, `DROP`, etc.);
 -   Suporte a **CTEs e CTEs recursivas** (`WITH` e `WITH RECURSIVE`);
--   Prevenção de **injeções SQL e múltiplos comandos encadeados**;
 -   Compatibilidade com **SQL Server (T-SQL)**.
+
+Principais capacidades
+
+-   ✅ Execução de SELECTs simples ou múltiplos SELECTs
+-   ✅ Suporte a DECLARE, SET e variáveis escalares
+-   ✅ Suporte a CTEs (WITH), inclusive múltiplas CTEs
+-   ✅ Suporte a comentários SQL (-- e /* ... */)
+-   ✅ Validação de tabelas físicas via whitelist
+-   ❌ Bloqueio total de DML, DDL, EXEC e transações
 
 > ⚠️ Esta rota deve ser usada **apenas por agentes técnicos homologados** (nível de automação avançado).  
 > O usuário humano nunca deve visualizar ou editar diretamente o SQL enviado.
@@ -56,17 +65,21 @@ SELECT * FROM hierarchy;
 
 ## 🧰 Recursos e Validações
 
-| Categoria                   | Comportamento                                                                          |
-| --------------------------- | -------------------------------------------------------------------------------------- |
-| **Comando permitido**       | Somente `SELECT`                                                                       |
-| **CTE simples e recursiva** | Suportadas                                                                             |
-| **Tabelas**                 | Limitadas a `allowed_tables.json`                                                      |
-| **Funções SQL**             | `SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, `TRIM`, `UPPER`, `LOWER`, `CAST`, `CONVERT`, etc. |
-| **Paginação e ORDER BY**    | Controladas pelo SQL enviado                                                           |
-| **Múltiplos comandos**      | 🚫 Bloqueados (`;` detectado fora do contexto)                                         |
-| **Comentários**             | Suportados (`--` e `/* ... */`)                                                        |
-| **Banco SQL Server**        | `WITH RECURSIVE` é automaticamente ajustado para `WITH`                                |
-| **Banco PostgreSQL/MySQL**  | Suporte nativo a `WITH RECURSIVE`                                                      |
+| Categoria                     | Comportamento                       |
+| ----------------------------- | ---------------------------------------------------------------- |
+| **Comandos permitidos**       | `DECLARE`, `SET`, `SELECT`, `WITH`  |
+| **CTEs**                      | Suportadas (simples e múltiplas)    |
+| **Múltiplos SELECTs**         | ✅ Permitidos na mesma requisição    |
+| **Variáveis SQL**             | `DECLARE` e `SET` permitidos        |
+| **Funções SQL**               | `SUM`, `COUNT`, `AVG`, `MIN`, `MAX`, `TRIM`, `UPPER`, `LOWER`, `CAST`, `CONVERT`, etc. |
+| **Comentários SQL**           | Suportados (`--` e `/* ... */`)     |
+| **Tabelas físicas**           | Validadas via `allowed_tables.json` |
+| **CTEs na whitelist**         | ❌ Não exigidas                      |
+| **DML / DDL**                 | ❌ Bloqueados                        |
+| **EXEC / stored procedures**  | ❌ Bloqueados                        |
+| **Transações (BEGIN/COMMIT)** | ❌ Bloqueadas                        |
+| **GO / batches**              | ❌ Não suportados                    |
+
 
 ---
 
@@ -133,10 +146,23 @@ curl -X POST "https://api.transformamaisdelpi.com.br/data/sql" \
 ## 🧠 Boas Práticas
 
 -   Sempre **finalize o SQL com `;`** (recomendado).
+-   Declare todas as variáveis antes do WITH ou SELECT
+-   Prefira CTEs para queries longas e legíveis
+-   Use comentários para documentar regras de negócio
+-   Use aliases claros (SB1, SH6, C)
 -   Prefira `WITH` (sem `RECURSIVE`) quando estiver em ambiente SQL Server.
--   Evite comandos longos — para relatórios complexos, use a rota `/data/query`.
 -   Utilize sempre **CTEs nomeadas claramente** (`WITH estoque_total AS (...)`).
 -   Mantenha a lista de `allowed_tables.json` atualizada conforme o ambiente Protheus.
+
+## 🔐 Limitações Importantes
+
+-   Apenas leitura
+-   Sem `INSERT`, `UPDATE`, `DELETE`
+-   Sem `EXEC` ou `sp_*`
+-   Sem `GO`
+-   Sem controle automático de paginação
+-   Não valida semântica de variáveis (erro vem do SQL Server)
+
 
 ---
 
@@ -168,17 +194,6 @@ Quando o agente precisar consultar dados SQL puros:
 -   Não executa funções de sistema (`EXEC`, `sp_...`).
 
 ---
-
-## 🧾 Resumo rápido
-
-| Item                 | `/data/query`           | `/data/sql`                  |
-| -------------------- | ----------------------- | ---------------------------- |
-| Entrada              | JSON estruturado        | JSON com campo `"sql"`       |
-| Validação            | Estrutural (Pydantic)   | Sintática (Regex + AST leve) |
-| Tipo de consulta     | Montada via JSON        | Escrita manual pelo agente   |
-| CTEs                 | Sim                     | Sim (inclusive recursivas)   |
-| Paginação automática | Sim                     | Não (manual via SQL)         |
-| Segurança            | Alta (campos whitelist) | Alta (com validação direta)  |
 
 ## 📗 Exemplos de solicitações
 
