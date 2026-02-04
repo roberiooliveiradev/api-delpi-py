@@ -184,7 +184,7 @@ Quando o agente precisar consultar dados SQL puros:
 
 ### 1. Usuário: "Listar produtos programados para produzir hoje"
 
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SC2010 — Ordens de Produção
 -   SH8010 — Operações Alocadas
@@ -198,7 +198,7 @@ Quando o agente precisar consultar dados SQL puros:
 -   C2_PRIOR = 500 (Prioridade Livre)
 -   Somente registros ativos (`D_E_L_E_T_ = ''`)
 
-💾 Consulta:
+#### 💾 Consulta:
 
 ```sql
 SELECT
@@ -239,7 +239,7 @@ ORDER BY
 
 ### 2. Usuário: "Listar OPs (ordens de produção) finalizadas hoje"
 
-🧱 Tabelas envolvidas:
+#### 🧱 Tabelas envolvidas:
 
 -   SC2010 — Ordens de Produção
 -   SD4010 — Empenhos de componentes
@@ -254,7 +254,7 @@ ORDER BY
 -   Todos os registros ativos (`D_E_L_E_T_ = ''`)
 -   OP.C2_PRIOR = 500 → prioridade Livre (501 Bloqueado)
 
-💾 Consulta:
+#### 💾 Consulta:
 
 ```sql
 SELECT
@@ -307,7 +307,7 @@ ORDER BY
 
 ### 3. Usuário: "Listar OPs programadas em aberto (não finalizadas) de hoje"
 
-🧱 Tabelas envolvidas:
+#### 🧱 Tabelas envolvidas:
 
 -   SC2010 — Ordens de Produção
 -   SD4010 — Empenhos de componentes
@@ -322,7 +322,7 @@ ORDER BY
 -   Todos os registros ativos (`D_E_L_E_T_ = ''`)
 -   OP.C2_PRIOR = 500 → prioridade Livre (501 Bloqueado)
 
-💾 Consulta:
+#### 💾 Consulta:
 
 ```sql
 SELECT
@@ -373,7 +373,7 @@ ORDER BY
 
 ### 4. Usuário: "Liste as OPs distintas em aberto."
 
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SC2010 — Ordens
 -   SD4010 — Empenhos
@@ -388,7 +388,7 @@ ORDER BY
 -   Filial = 01 ou 02
 -   `D_E_L_E_T_ = ''`
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 SELECT DISTINCT
@@ -416,7 +416,7 @@ ORDER BY
 
 ### 5. Usuário: "Agrupar as ordens por centro de trabalho (CT) e contar finalizadas e não finalizadas."
 
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SC2010
 -   SD4010
@@ -432,7 +432,7 @@ ORDER BY
 -   Filial = 01 ou 02
 -   Registros ativos
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -467,7 +467,7 @@ ORDER BY
 
 ### 6. Usuário: “Identificar componentes sem empenho registrado (travamento de produção) para um CT específico”
 
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SD4010 — Empenhos
 -   SH8010 — Operações
@@ -483,7 +483,7 @@ ORDER BY
 -   Filial = 01
 -   Registros ativos
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -519,7 +519,7 @@ ORDER BY
 
 ### 7. Usuário: “Identificar ordens finalizadas sem consumo de componentes”
 
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SC2010 — Ordens
 -   SD4010 — Empenhos
@@ -536,7 +536,7 @@ ORDER BY
 -   Filial = 01
 -   Registros ativos
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -587,7 +587,7 @@ ORDER BY
 
 ### 8. Usuário: "Média de tempo por CT (H8_HRINI → H8_HRFIM)"
 
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SC2010 — Ordens de Produção
 -   SD4010 — Empenhos
@@ -604,7 +604,7 @@ ORDER BY
 -   H8_HRINI IS NOT NULL
 -   Registros ativos
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -653,7 +653,7 @@ ORDER BY
 
 ### 9. Usuário: "Estoque total por filial/local, Grupo 1008 Descrição TERM. BANDEIRA"
 
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SD4010 — Empenhos de componentes
 -   SH8010 — Operações alocadas
@@ -668,7 +668,7 @@ ORDER BY
 -   Filial = 01
 -   Registros ativos (`D_E_L_E_T* = '' `)
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 WITH estoque_total AS (
@@ -703,7 +703,7 @@ ORDER BY
 ```
 
 ### 10. Usuário: “Buscar produtos do grupo 1050 com descrição contendo COMP e unidade diferente de peça”
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SB1010 — Cadastro de Produtos (fonte única necessária)
 
@@ -714,7 +714,7 @@ ORDER BY
 -   Unidade de medida diferente de peça (PC)
 -   Registros ativos (`D_E_L_E_T* = '' `)
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -733,7 +733,7 @@ ORDER BY
 ```
 
 ### 11. Usuário: “Encontrar produtos com partnumbers duplicados para um fornecedor”
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SB1010 — Cadastro de Produtos
 
@@ -749,7 +749,7 @@ ORDER BY
 -   Identifica partnumbers duplicados por fornecedor
     -   Mesmo A5_CODPRF associado a mais de um produto
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -782,7 +782,7 @@ ORDER BY
 ```
 
 ### 11. Usuário: “Buscar a última NF válida de um produto, excluindo transportadoras.”
-🧱 Tabelas envolvidas
+#### 🧱 Tabelas envolvidas
 
 -   SD1010 — Itens de Notas Fiscais de Entrada
 
@@ -826,7 +826,7 @@ ORDER BY
 
     -   Uso de `ROW_NUMBER()` para selecionar apenas o registro mais recente (`RN = 1`)
 
-💾 Consulta
+#### 💾 Consulta
 
 ```sql
 WITH ULTIMA_NF_PRODUTO AS (
@@ -885,45 +885,62 @@ ORDER BY COD_MATERIA_PRIMA;
 
 ### 12. Usuário: “Identificar a quantidade consumida de terminais por CT, agrupada por filial”
 
-🎯 Objetivo da consulta
+#### 🎯 Objetivo da consulta
 
-> Identificar a quantidade efetivamente consumida de terminais (grupo 1008) em um Centro de Trabalho específico (CT), 
-com produção real comprovada, agrupando os resultados por filial, dentro de um período definido.
+Identificar a **quantidade efetivamente consumida de terminais (grupo 1008)** em um **Centro de Trabalho específico (CT)**, com **produção real comprovada**, **agrupando os resultados por filial**, dentro de um **período definido**.
 
 A consulta garante que:
 
--   O consumo é real (não apenas planejado)
+- O consumo considerado é **real**, não apenas planejado  
+- O CT é validado por **apontamento efetivo de produção**  
+- As quantidades **não são infladas** por múltiplos apontamentos  
+- Os resultados são **comparáveis entre filiais**
 
--   O CT é validado via apontamento de produção
+---
 
--   As quantidades não são infladas por múltiplos apontamentos
+#### 🧱 Tabelas envolvidas
 
-🧱 Tabelas envolvidas
+- **SD4010** — Empenhos / Consumo de materiais na OP  
+- **SB1010** — Cadastro de produtos (terminais)  
+- **SH6010** — Apontamentos de produção (execução real)
 
--   SD4010 — Empenhos / Consumo de materiais na OP
-
--   SB1010 — Cadastro de produtos (terminais)
-
--   SH6010 — Apontamentos de produção (execução real)
+---
 
 ⚙️ Condições aplicadas
 
--   B1_GRUPO = '1008' → Apenas terminais
+- **B1_GRUPO = '1008'**  
+  → Apenas **terminais**
 
--   H6_TIPO = 'P' → Apontamento de produção válido
+- **H6_TIPO = 'P'**  
+  → Apenas apontamentos de produção válidos
 
--   H6_RECURSO = CT informado → CT inferido pelo recurso
+- **H6_RECURSO = CT informado**  
+  → CT inferido a partir do recurso apontado na produção
 
--   Período → H6_DATAINI BETWEEN DataInicial AND DataFinal
+- **Período de execução real**  
+  → `H6_DATAINI BETWEEN DataInicial AND DataFinal`  
+  *(formato `YYYYMMDD`)*
 
--   Agrupamento por filial (SD4.D4_FILIAL)
+- **Agrupamento por filial**  
+  → `SD4.D4_FILIAL`
 
--   Registros ativos (D_E_L_E_T_ = '')
+- **Somente registros ativos**  
+  → `D_E_L_E_T_ = ''`
 
--   Quantidade consumida calculada como:
-    -   D4_QTDEORI - D4_QUANT (mesmo critério da query de golpes)
+- **Validação de execução real por operação**  
+  → Uso de `EXISTS (SH6010)` para garantir que **cada linha da SD4010 só é considerada se a operação teve produção real no CT e no período**
 
-💾 Consulta
+---
+
+📐 Regra de cálculo da quantidade consumida
+
+A quantidade consumida é calculada **exclusivamente a partir da SD4010**, utilizando o **mesmo critério da query consolidada de golpes**:
+
+```text
+D4_QTDEORI - D4_QUANT
+```
+
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -931,7 +948,7 @@ SELECT
     SD4.D4_COD           AS COD_MATERIAL,
     SB1.B1_DESC          AS DESC_MATERIAL,
     SB1.B1_UM            AS UNIDADE,
-    'CT-53'                  AS CT,
+    'CT-53'              AS CT,
     SUM(
         CASE
             WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
@@ -942,36 +959,241 @@ SELECT
 FROM SD4010 SD4
 INNER JOIN SB1010 SB1
     ON SB1.B1_COD = SD4.D4_COD
+WHERE
+    SD4.D_E_L_E_T_ = ''
+    AND SB1.D_E_L_E_T_ = ''
+    AND SB1.B1_GRUPO = '1008'
 
-INNER JOIN (
-    SELECT DISTINCT
+    AND EXISTS (
+        SELECT 1
+        FROM SH6010 SH6
+        WHERE
+            SH6.D_E_L_E_T_ = ''
+            AND SH6.H6_TIPO = 'P'
+            AND SH6.H6_FILIAL = SD4.D4_FILIAL
+            AND SH6.H6_OP     = SD4.D4_OP
+            AND SH6.H6_OPERAC = SD4.D4_OPERAC
+            AND SH6.H6_RECURSO = 'CT-53'
+            AND SH6.H6_DATAINI BETWEEN '20250101' AND '20251231'
+    )
+GROUP BY
+    SD4.D4_FILIAL,
+    SD4.D4_COD,
+    SB1.B1_DESC,
+    SB1.B1_UM
+ORDER BY
+    SD4.D4_FILIAL,
+    SD4.D4_COD;
+```
+
+### 13. Tempo médio real de consumo por terminal (CT específico, sem duplicidade de tempo)
+
+#### 🎯 Objetivo
+
+Calcular, para cada **terminal elétrico**, o **tempo médio real de consumo por peça**, considerando:
+
+- Apenas **apontamentos de produção** (`H6_TIPO = 'P'`)
+- Um **Centro de Trabalho específico** (`CT-53`)
+- Uma **faixa de datas definida**
+- **Quantidade real consumida** do terminal
+- **Eliminação de duplicidade de tempo**, consolidando todos os apontamentos de uma mesma **OP + operação**
+
+O resultado é um indicador **ponderado pelo volume**, tecnicamente consistente e validado com dados reais do Protheus.
+
+
+
+#### 🧱 Tabelas envolvidas
+
+- **SH6010** — Apontamentos de produção (tempo, CT, OP, operação)
+- **SD4010** — Consumo de materiais por OP e operação
+- **SB1010** — Cadastro de produtos (classificação dos terminais)
+
+
+
+#### ⚙️ Condições aplicadas
+
+-   SH6010 — Apontamentos de Produção
+
+    -   Apenas registros ativos  
+    -   `D_E_L_E_T_ = ''`
+    -   Somente produção  
+    -   `H6_TIPO = 'P'`
+    -   Centro de trabalho específico  
+    -   `H6_RECURSO = 'CT-53'`
+    -   Faixa de datas  
+    -   `H6_DATAINI BETWEEN '20250101' AND '20251231'`
+    -   Apontamentos completos  
+    -   `H6_DATAFIN IS NOT NULL`
+    -   `H6_HORAINI <> ''`
+    -   `H6_HORAFIN <> ''`
+    -   **Consolidação do tempo** por:
+    -   Filial
+    -   OP
+    -   Operação
+    -   CT
+
+
+- SD4010 — Consumo de Terminais
+    - Apenas registros ativos  
+        - `D_E_L_E_T_ = ''`
+    - Quantidade real consumida calculada como:  
+        - `QTDEORI - QUANT` (quando positiva)
+    - Agrupamento por:
+        - Filial
+        - OP
+        - Operação
+        - Código do material
+
+-   SB1010 — Cadastro de Produto
+    - Apenas registros ativos  
+        - `D_E_L_E_T_ = ''`
+    - Apenas **terminais**  
+        - `B1_GRUPO = '1008'`
+
+---
+
+#### 🧮 Equações envolvidas
+
+-   ⏱️ Tempo total por OP + operação
+Para cada OP \(i\) e operação \(j\):
+\[
+T_{i,j} =
+\sum
+\left(
+\text{DataHoraFim}_{i,j} -
+\text{DataHoraInicio}_{i,j}
+\right)
+\]
+> A soma elimina a duplicidade causada por múltiplos apontamentos na SH6010.
+
+
+-   📦 Quantidade real consumida do terminal
+Para cada terminal \(t\), OP \(i\) e operação \(j\):
+\[
+Q_{i,j,t} =
+\sum
+\begin{cases}
+D4\_QTDEORI - D4\_QUANT, & \text{se } D4\_QTDEORI > D4\_QUANT \\
+0, & \text{caso contrário}
+\end{cases}
+\]
+
+
+
+#### ⏱️ Tempo médio real por terminal (ponderado)
+
+Para cada terminal \(t\):
+\[
+\boxed{
+TempoMédio_t =
+\frac{\sum T_{i,j}}{\sum Q_{i,j,t}}
+}
+\]
+- Unidade: **segundos por peça**
+- O tempo é **ponderado pelo volume real consumido**
+- Não é média simples por OP
+
+
+#### 💾 Consulta
+
+```sql
+WITH SH6_CONSOLIDADO AS (
+    SELECT
         H6_FILIAL,
         H6_OP,
-        H6_OPERAC
+        H6_OPERAC,
+        H6_RECURSO,
+
+        -- Tempo TOTAL por OP + operação (elimina duplicidade)
+        SUM(
+            DATEDIFF(
+                SECOND,
+                CAST(CONVERT(char(8), H6_DATAINI, 112) + ' ' + H6_HORAINI AS datetime),
+                CAST(CONVERT(char(8), H6_DATAFIN, 112) + ' ' + H6_HORAFIN AS datetime)
+            )
+        ) AS TEMPO_OP_SEG
     FROM SH6010
     WHERE
         D_E_L_E_T_ = ''
         AND H6_TIPO = 'P'
         AND H6_RECURSO = 'CT-53'
         AND H6_DATAINI BETWEEN '20250101' AND '20251231'
-) SH6
-    ON SH6.H6_FILIAL = SD4.D4_FILIAL
-   AND SH6.H6_OP     = SD4.D4_OP
-   AND SH6.H6_OPERAC = SD4.D4_OPERAC
+        AND H6_DATAFIN IS NOT NULL
+        AND H6_HORAINI <> ''
+        AND H6_HORAFIN <> ''
+    GROUP BY
+        H6_FILIAL,
+        H6_OP,
+        H6_OPERAC,
+        H6_RECURSO
+),
+
+CONSUMO AS (
+    SELECT
+        SD4.D4_FILIAL,
+        SD4.D4_OP,
+        SD4.D4_OPERAC,
+        SD4.D4_COD,
+
+        -- Quantidade REAL consumida do terminal
+        SUM(
+            CASE
+                WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
+                THEN SD4.D4_QTDEORI - SD4.D4_QUANT
+                ELSE 0
+            END
+        ) AS QTD_CONSUMIDA
+    FROM SD4010 SD4
+    WHERE
+        SD4.D_E_L_E_T_ = ''
+    GROUP BY
+        SD4.D4_FILIAL,
+        SD4.D4_OP,
+        SD4.D4_OPERAC,
+        SD4.D4_COD
+)
+
+SELECT
+    SH6.H6_FILIAL        AS FILIAL,
+    SB1.B1_COD           AS COD_TERMINAL,
+    SB1.B1_DESC          AS DESC_TERMINAL,
+    SB1.B1_UM            AS UM,
+    SH6.H6_RECURSO       AS CT,
+
+    -- Quantidade total REAL no período / CT
+    SUM(C.QTD_CONSUMIDA) AS QTD_TOTAL_TERMINAL,
+
+    -- Tempo total REAL (sem duplicidade)
+    SUM(SH6.TEMPO_OP_SEG) AS TEMPO_TOTAL_SEG,
+
+    -- Tempo médio REAL por peça (ponderado)
+    SUM(SH6.TEMPO_OP_SEG) * 1.0
+    / NULLIF(SUM(C.QTD_CONSUMIDA), 0)
+    AS TEMPO_MEDIO_SEG_POR_PECA
+
+FROM SH6_CONSOLIDADO SH6
+
+INNER JOIN CONSUMO C
+    ON C.D4_FILIAL = SH6.H6_FILIAL
+   AND C.D4_OP     = SH6.H6_OP
+   AND C.D4_OPERAC = SH6.H6_OPERAC
+
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD   = C.D4_COD
+   AND SB1.B1_GRUPO = '1008'
+   AND SB1.D_E_L_E_T_ = ''
 
 WHERE
-    SD4.D_E_L_E_T_ = ''
-
-    AND SB1.D_E_L_E_T_ = ''
-    AND SB1.B1_GRUPO = '1008'
+    C.QTD_CONSUMIDA > 0
 
 GROUP BY
-    SD4.D4_FILIAL,
-    SD4.D4_COD,
+    SH6.H6_FILIAL,
+    SB1.B1_COD,
     SB1.B1_DESC,
-    SB1.B1_UM
+    SB1.B1_UM,
+    SH6.H6_RECURSO
 
 ORDER BY
-    SD4.D4_FILIAL,
-    SD4.D4_COD;
+    SH6.H6_FILIAL,
+    TEMPO_MEDIO_SEG_POR_PECA;
 ```

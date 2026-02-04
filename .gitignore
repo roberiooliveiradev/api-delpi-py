@@ -47,7 +47,6 @@ data/tmp/
 uploads/
 results/
 tmp/
-*.pdf
 *.dwg
 *.dxf
 *.png
@@ -71,7 +70,6 @@ docker-data/
 # ---- 🧾 Relatórios e Saídas ----
 reports/
 output/
-*.pdf
 *.csv
 *.xlsx
 *.docx
