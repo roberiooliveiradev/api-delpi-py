@@ -90,13 +90,15 @@ curl -X POST "https://api.transformamaisdelpi.com.br/data/sql" \
   -H "Authorization: Bearer <TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "sql": "WITH hierarchy AS (SELECT B1_COD, B1_GRUPO, 0 AS LEVEL FROM SB1010 WHERE B1_GRUPO = '\''1008'\'' UNION ALL SELECT p.B1_COD, p.B1_GRUPO, h.LEVEL + 1 FROM SB1010 p JOIN hierarchy h ON p.B1_GRUPO = h.B1_COD) SELECT * FROM hierarchy;"
+    "sql": "DECLARE @G VARCHAR(10); SET @G = '\''1008'\''; SELECT TOP 3 * FROM SB1010 WHERE B1_GRUPO = @G;"
   }'
 ```
 
 ---
 
 ## ✅ Resposta de Sucesso
+
+-   Consulta simples
 
 ```json
 {
@@ -110,6 +112,25 @@ curl -X POST "https://api.transformamaisdelpi.com.br/data/sql" \
 }
 ```
 
+-   Múltiplos SELECTs
+
+```json
+{
+  "success": true,
+  "results": [
+    {
+      "index": 1,
+      "total": 3,
+      "data": [ ... ]
+    },
+    {
+      "index": 2,
+      "total": 1,
+      "data": [ ... ]
+    }
+  ]
+}
+```
 ---
 
 ## ❌ Resposta de Erro
@@ -132,12 +153,12 @@ curl -X POST "https://api.transformamaisdelpi.com.br/data/sql" \
 }
 ```
 
-### 🚫 SQL encadeado
+### 🚫 SQL inválido
 
 ```json
 {
-    "success": false,
-    "message": "⚠️ Detecção de múltiplos comandos SQL — apenas uma instrução é permitida."
+  "success": false,
+  "message": "Somente instruções DECLARE, SET, SELECT ou WITH são permitidas."
 }
 ```
 
