@@ -1197,3 +1197,111 @@ ORDER BY
     SH6.H6_FILIAL,
     TEMPO_MEDIO_SEG_POR_PECA;
 ```
+
+### TESTE ESSE SQL, É SÓ VC ALTERAR AS VARIAVEIS DO COMEÇO:
+```sql
+
+
+
+--  CALCULAR A QUANTIDADE CONSUMIDA DE TERMINAL E O TEMPO MÉDIO POR TERMINAL
+DECLARE @CT VARCHAR(20);
+DECLARE @GRUPO VARCHAR(20);
+DECLARE @DATA_INICIO VARCHAR(20);
+DECLARE @DATA_FIM VARCHAR(20);
+
+-- ALTERAR ESSAS VARIAVEIS =====
+SET @CT = 'CT-33A';
+SET @GRUPO = '1007';
+SET @DATA_INICIO = '20250101';
+SET @DATA_FIM = '20251231';
+-- =======================
+
+WITH SH6_CONSOLIDADO AS (
+    SELECT
+        H6_FILIAL,
+        H6_OP,
+        H6_OPERAC,
+        H6_RECURSO,
+        -- Tempo TOTAL por OP + operação (elimina duplicidade)
+        SUM(
+            DATEDIFF(
+                SECOND,
+                CAST(CONVERT(char(8), H6_DATAINI, 112) + ' ' + H6_HORAINI AS datetime),
+                CAST(CONVERT(char(8), H6_DATAFIN, 112) + ' ' + H6_HORAFIN AS datetime)
+            )
+        ) AS TEMPO_OP_SEG
+    FROM SH6010
+    WHERE
+        D_E_L_E_T_ = ''
+        AND H6_TIPO = 'P'
+        AND H6_RECURSO = @CT
+        AND H6_DATAINI BETWEEN @DATA_INICIO AND @DATA_FIM
+        AND H6_DATAFIN IS NOT NULL
+        AND H6_HORAINI <> ''
+        AND H6_HORAFIN <> ''
+    GROUP BY
+        H6_FILIAL,
+        H6_OP,
+        H6_OPERAC,
+        H6_RECURSO
+),
+
+CONSUMO AS (
+    SELECT
+        SD4.D4_FILIAL,
+        SD4.D4_OP,
+        SD4.D4_OPERAC,
+        SD4.D4_COD,
+        -- Quantidade REAL consumida do terminal
+        SUM(
+            CASE
+                WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
+                THEN SD4.D4_QTDEORI - SD4.D4_QUANT
+                ELSE 0
+            END
+        ) AS QTD_CONSUMIDA
+    FROM SD4010 SD4
+    WHERE
+        SD4.D_E_L_E_T_ = ''
+    GROUP BY
+        SD4.D4_FILIAL,
+        SD4.D4_OP,
+        SD4.D4_OPERAC,
+        SD4.D4_COD
+)
+SELECT
+    SH6.H6_FILIAL AS FILIAL,
+    SB1.B1_COD   AS COD_TERMINAL,
+    SB1.B1_DESC  AS DESC_TERMINAL,
+    SB1.B1_UM    AS UM,
+    SH6.H6_RECURSO AS CT,
+    -- Quantidade total REAL no período / CT
+    SUM(C.QTD_CONSUMIDA) AS QTD_TOTAL_TERMINAL,
+    -- Tempo total REAL (sem duplicidade)
+    SUM(SH6.TEMPO_OP_SEG) AS TEMPO_TOTAL_SEG,
+    -- Tempo médio REAL por peça (ponderado)
+    SUM(SH6.TEMPO_OP_SEG) * 1.0
+    / NULLIF(SUM(C.QTD_CONSUMIDA), 0)
+    AS TEMPO_MEDIO_SEG_POR_PECA
+FROM SH6_CONSOLIDADO SH6
+INNER JOIN CONSUMO C
+    ON C.D4_FILIAL = SH6.H6_FILIAL
+   AND C.D4_OP     = SH6.H6_OP
+   AND C.D4_OPERAC = SH6.H6_OPERAC
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD   = C.D4_COD
+   AND SB1.B1_GRUPO = @GRUPO
+   AND SB1.D_E_L_E_T_ = ''
+WHERE
+    C.QTD_CONSUMIDA > 0
+GROUP BY
+    SH6.H6_FILIAL,
+    SB1.B1_COD,
+    SB1.B1_DESC,
+    SB1.B1_UM,
+    SH6.H6_RECURSO
+ORDER BY
+    SH6.H6_FILIAL,
+    SB1.B1_COD,
+    TEMPO_MEDIO_SEG_POR_PECA;
+```

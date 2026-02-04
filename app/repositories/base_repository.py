@@ -84,7 +84,47 @@ class BaseRepository:
             return self._clean_json_data(json.loads(raw_json))
         except json.JSONDecodeError:
             return {}
+        
+    def execute_query_multiple(self, query: str, params: tuple = ()) -> list[dict]:
+        """
+        Executa SQL com múltiplos SELECTs e retorna múltiplos resultsets.
+        Cada SELECT vira um bloco independente.
+        """
+        try:
+            self.connect()
+            self.cursor.execute(query, params)
 
+            resultsets = []
+            index = 1
+
+            while True:
+                if self.cursor.description:
+                    columns = [desc[0] for desc in self.cursor.description]
+                    rows = self.cursor.fetchall()
+
+                    data = [
+                        self._normalize_row(dict(zip(columns, row)))
+                        for row in rows
+                    ]
+
+                    resultsets.append({
+                        "index": index,
+                        "columns": columns,
+                        "total": len(data),
+                        "data": data
+                    })
+                    index += 1
+
+                if not self.cursor.nextset():
+                    break
+
+            return resultsets
+
+        except Exception as e:
+            log_error(f"Erro ao executar múltiplos SELECTs: {e}")
+            raise DatabaseConnectionError(str(e))
+        finally:
+            self.close()
 
     # ---------------------------
     # 🔹 Normalização de dados

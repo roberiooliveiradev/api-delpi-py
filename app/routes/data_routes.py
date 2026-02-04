@@ -1,59 +1,11 @@
 from fastapi import APIRouter, Request, Body
 from fastapi.responses import JSONResponse
-from app.services.data_service import run_dynamic_query, run_raw_sql
+from app.services.data_service import run_raw_sql
 from app.models.data_query_model import DataQueryRequestOpenAPI, RawSqlRequest
 from app.core.responses import success_response, error_response
 from app.utils.logger import log_info, log_error
 
 router = APIRouter()
-
-
-# @router.post("/query", summary="Consulta genérica (CTE, aliases, agregações, filtros, paginação)")
-async def query_tables(request: Request, req: DataQueryRequestOpenAPI):
-    """
-    Executa consultas dinâmicas com suporte a:
-    - Múltiplas CTEs (WITH ...)
-    - Tabelas/CTEs com alias
-    - Filtros recursivos (AND/OR)
-    - Agrupamento, agregações, auto_aggregate
-    - Ordenação e paginação (apenas na consulta principal)
-    """
-    try:
-        if hasattr(req, "model_dump"):
-            payload = req.model_dump(exclude_none=True, by_alias=True)
-        else:
-            payload = req.dict(exclude_none=True, by_alias=True)
-
-        cfg = request.app.state.agent_config
-
-        if cfg.get("auto_execute_api", True):
-            result = run_dynamic_query(payload)
-            return success_response(
-                data=result,
-                message="Consulta executada automaticamente."
-            )
-
-        if cfg.get("confirm_before_request", False):
-            return success_response(
-                data=payload,
-                message="Confirmar envio desta consulta?"
-            )
-
-        if cfg.get("show_payload_before_execute", False):
-            return success_response(
-                data=payload,
-                message="Payload antes da execução."
-            )
-
-        result = run_dynamic_query(payload)
-        return success_response(
-            data=result,
-            message="Consulta executada com sucesso."
-        )
-
-    except Exception as e:
-        log_error(f"Erro ao executar consulta dinâmica: {e}")
-        return error_response(str(e))
 
 @router.post(
     "/sql",
@@ -110,8 +62,6 @@ async def execute_sql_raw(request: Request):
         # 🔒 Validação mínima
         if not sql_text:
             return error_response("Corpo vazio — nenhum SQL foi recebido.")
-        if not sql_text.lower().startswith(("select", "with")):
-            return error_response("Somente instruções SELECT ou WITH são permitidas.")
 
         # 🔹 Execução segura
         result = run_raw_sql(sql_text)
