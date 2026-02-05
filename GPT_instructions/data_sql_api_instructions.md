@@ -1964,3 +1964,82 @@ ORDER BY
     SB1.B1_COD,
     TEMPO_MEDIO_SEG_POR_PECA;
 ```
+
+---
+
+### 15. Usuário: **"Buscar produtos com descrição duplicada (Matéria-Prima)."**
+
+#### 🎯 Objetivo
+
+Identificar **produtos do tipo Matéria-Prima (MP)** cadastrados no
+Protheus que compartilham **a mesma descrição (`B1_DESC`)**,
+caracterizando **duplicidade de cadastro**, garantindo que:
+
+-   apenas **produtos ativos** sejam considerados;
+-   o escopo seja **restrito a MP**;
+-   a duplicidade seja determinada **exclusivamente pela descrição
+    textual**;
+-   todos os **códigos envolvidos** em cada descrição duplicada sejam
+    retornados;
+-   seja possível **quantificar o grau de duplicidade** por descrição.
+
+O objetivo é **detectar inconsistências de cadastro**, apoiar
+**saneamento de dados** e **prevenir riscos operacionais**.
+
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SB1010 --- Cadastro de Produtos
+
+  Coluna          | Descrição
+  --------------- | ----------------------
+  B1_COD          | Código do produto
+  B1_DESC         | Descrição do produto
+  B1_TIPO         | Tipo do produto
+  D_E\_L_E\_T\_   | Exclusão lógica
+
+---
+
+#### ⚙️ Condições aplicadas
+
+-   Somente produtos ativos
+    -   `D_E_L_E_T_ = ''`
+-   Somente Matéria-Prima
+    -   `B1_TIPO = 'MP'`
+-   Identificação de duplicidade
+    -   Agrupamento por `B1_DESC`
+    -   `HAVING COUNT(*) > 1`
+
+---
+
+#### 💾 Consulta
+
+``` sql
+WITH descricoes_duplicadas AS (
+    SELECT
+        B1_DESC,
+        COUNT(*) AS QTD
+    FROM SB1010
+    WHERE
+        D_E_L_E_T_ = ''
+        AND B1_TIPO = 'MP'
+    GROUP BY
+        B1_DESC
+    HAVING COUNT(*) > 1
+)
+SELECT
+    P.B1_COD   AS COD_PRODUTO,
+    P.B1_DESC  AS DESCRICAO,
+    D.QTD      AS QTD_PRODUTOS_COM_MESMA_DESCRICAO
+FROM SB1010 P
+INNER JOIN descricoes_duplicadas D
+    ON D.B1_DESC = P.B1_DESC
+WHERE
+    P.D_E_L_E_T_ = ''
+    AND P.B1_TIPO = 'MP'
+ORDER BY
+    D.QTD DESC,
+    P.B1_DESC,
+    P.B1_COD;
+```
