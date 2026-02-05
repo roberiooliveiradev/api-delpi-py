@@ -16,7 +16,7 @@ from fastapi import Request
 
 router = APIRouter()
 
-@router.get("/", summary="Listagem de produtos com limite")
+# @router.get("/", summary="Listagem de produtos com limite")
 def products(limit: int = Query(50, ge=1, le=200)):
     """
     Retorna uma lista de produtos com limite opcional (padrão = 10).
@@ -51,7 +51,7 @@ def search_products_by_description_route(
         return error_response(f"Erro inesperado: {e}")
 
 
-@router.post("/search", summary="Pesquisa de produtos via POST, com filtros e paginação")
+# @router.post("/search", summary="Pesquisa de produtos via POST, com filtros e paginação")
 def search_products_post_route(body: ProductSearchRequest):
     try:
         result = search_products(
@@ -153,7 +153,6 @@ async def structure_excel_public(
     except Exception as e:
         log_error(f"Erro ao gerar planilha Excel pública de {code}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
 
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
 def parents(
@@ -281,7 +280,6 @@ def product_sales_summary(code: str):
     except Exception as e:
         log_error(f"Erro ao consultar vendas do produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
-
 
 @router.get(
     "/{code}/sales/open-orders",
