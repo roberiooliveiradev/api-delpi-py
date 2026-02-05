@@ -718,45 +718,146 @@ class ProductRepository(BaseRepository):
     # -------------------------------
     # 🔹 SUPPLIERS
     # -------------------------------
-    def list_suppliers(self, code: str, page: int = 1, page_size: int = 50) -> dict:
+    def list_suppliers(
+        self,
+        code: str,
+        page: int = 1,
+        page_size: int = 50
+    ) -> dict:
+
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
 
-        log_info(f"Listando fornecedores de {code}, página {page}, tamanho {page_size}")
         offset = (page - 1) * page_size
 
-        # Contagem total
-        count_query = """
+        count_sql = """
             SELECT COUNT(*) AS total
-            FROM SA5010 AS SA5
-            WHERE SA5.D_E_L_E_T_ = ''
-            AND SA5.A5_PRODUTO = ?
+            FROM SA5010
+            WHERE D_E_L_E_T_ = ''
+            AND A5_PRODUTO = ?
         """
-        total_row = self.execute_one(count_query, (code,))
-        total_rows = int(total_row["total"] or 0)
 
-        # Consulta paginada
-        query = """
-            SELECT *
-            FROM SA5010 AS SA5
-            WHERE SA5.D_E_L_E_T_ = ''
-            AND SA5.A5_PRODUTO = ?
-            ORDER BY SA5.A5_FORNECE
+        total = int(self.execute_one(count_sql, (code,))["total"] or 0)
+
+        sql = """ 
+            WITH LAST_PURCHASE AS (
+                SELECT
+                    C7.C7_PRODUTO,
+                    C7.C7_FORNECE,
+                    C7.C7_LOJA,
+                    C7.C7_PRECO,
+                    C7.C7_EMISSAO,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY
+                            C7.C7_PRODUTO,
+                            C7.C7_FORNECE,
+                            C7.C7_LOJA
+                        ORDER BY
+                            C7.C7_EMISSAO DESC
+                    ) AS rn
+                FROM SC7010 C7
+                WHERE
+                    C7.D_E_L_E_T_ = ''
+                    AND C7.C7_PRODUTO = ?
+            ),
+
+            REAL_LEAD_TIME AS (
+                SELECT
+                    C7.C7_PRODUTO,
+                    C7.C7_FORNECE,
+                    C7.C7_LOJA,
+                    COUNT(*) AS amostra,
+                    AVG(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS lead_time_medio,
+                    MIN(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS lead_time_min,
+                    MAX(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS lead_time_max
+                FROM SC7010 C7
+                INNER JOIN SD1010 SD1
+                    ON SD1.D1_PEDIDO  = C7.C7_NUM
+                AND SD1.D1_FORNECE = C7.C7_FORNECE
+                AND SD1.D1_LOJA    = C7.C7_LOJA
+                AND SD1.D1_COD     = C7.C7_PRODUTO
+                AND SD1.D_E_L_E_T_ = ''
+                WHERE
+                    C7.D_E_L_E_T_ = ''
+                    AND C7.C7_PRODUTO = ?
+                GROUP BY
+                    C7.C7_PRODUTO,
+                    C7.C7_FORNECE,
+                    C7.C7_LOJA
+            )
+
+            SELECT
+                -- PRODUTO
+                SB1.B1_COD            AS produto,
+                SB1.B1_DESC           AS descricao_produto,
+                SB1.B1_UM             AS unidade,
+
+                -- FORNECEDOR
+                SA5.A5_FORNECE        AS fornecedor,
+                SA5.A5_LOJA           AS loja,
+                SA2.A2_NOME           AS fornecedor_nome,
+
+                -- CÓDIGOS DO PRODUTO NO FORNECEDOR
+                SA5.A5_CODPRF         AS part_number,
+                SA5.A5_CODPRCA        AS codigo_catalogo,
+                SA5.A5_CODBAR         AS codigo_barras,
+
+                -- LEAD TIMES
+                SA5.A5_LEAD_T         AS lead_time_cadastrado,
+                RLT.lead_time_medio   AS lead_time_real_medio,
+                RLT.lead_time_min     AS lead_time_real_min,
+                RLT.lead_time_max     AS lead_time_real_max,
+                RLT.amostra           AS amostra_lead_time_real,
+
+                -- PREÇO
+                LP.C7_PRECO           AS ultimo_preco,
+                LP.C7_EMISSAO         AS data_ultimo_preco
+
+            FROM SA5010 SA5
+            INNER JOIN SB1010 SB1
+                ON SB1.B1_COD = SA5.A5_PRODUTO
+            AND SB1.D_E_L_E_T_ = ''
+
+            LEFT JOIN SA2010 SA2
+                ON SA2.A2_COD = SA5.A5_FORNECE
+            AND SA2.A2_LOJA = SA5.A5_LOJA
+            AND SA2.D_E_L_E_T_ = ''
+
+            LEFT JOIN LAST_PURCHASE LP
+                ON LP.C7_PRODUTO = SA5.A5_PRODUTO
+            AND LP.C7_FORNECE = SA5.A5_FORNECE
+            AND LP.C7_LOJA = SA5.A5_LOJA
+            AND LP.rn = 1
+
+            LEFT JOIN REAL_LEAD_TIME RLT
+                ON RLT.C7_PRODUTO = SA5.A5_PRODUTO
+            AND RLT.C7_FORNECE = SA5.A5_FORNECE
+            AND RLT.C7_LOJA = SA5.A5_LOJA
+
+            WHERE
+                SA5.D_E_L_E_T_ = ''
+                AND SA5.A5_PRODUTO = ?
+
+            ORDER BY
+                SA5.A5_FORNECE
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
-        data = self.execute_query(query, (code, offset, page_size))
+        rows = self.execute_query(
+            sql,
+            (code, code, code, offset, page_size)
+        )
 
         return {
             "success": True,
-            "total": total_rows,
+            "total": total,
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
-            "data": data
+            "totalPages": (total + page_size - 1) // page_size,
+            "data": rows
         }
-    
+
     # -------------------------------
     # 🔹 INBOUND INVOICE ITEMS (Notas Fiscais de Entrada)
     # -------------------------------
@@ -770,77 +871,106 @@ class ProductRepository(BaseRepository):
         supplier: Optional[str] = None,
         branch: Optional[str] = None
     ) -> dict:
+
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
 
         offset = (page - 1) * page_size
-        log_info(f"Listando NF-es de entrada de {code}, página {page}, filtros aplicados.")
 
         filters = []
         params = [code]
 
         if issue_date_start:
-            filters.append("SD1.D1_EMISSAO >= ?")
             issue_date_start = self._convert_date_to_protheus(issue_date_start)
+            filters.append("SD1.D1_EMISSAO >= ?")
             params.append(issue_date_start)
+
         if issue_date_end:
-            filters.append("SD1.D1_EMISSAO <= ?")
             issue_date_end = self._convert_date_to_protheus(issue_date_end)
+            filters.append("SD1.D1_EMISSAO <= ?")
             params.append(issue_date_end)
+
         if supplier:
             filters.append("SD1.D1_FORNECE = ?")
             params.append(supplier)
+
         if branch:
             filters.append("SD1.D1_FILIAL = ?")
             params.append(branch)
 
-        where_clause = " AND ".join(filters)
-        if where_clause:
-            where_clause = " AND " + where_clause
+        where_extra = ""
+        if filters:
+            where_extra = " AND " + " AND ".join(filters)
 
-        # Contagem total
-        count_query = f"""
+        # COUNT
+        count_sql = f"""
             SELECT COUNT(*) AS total
-            FROM SD1010 AS SD1
+            FROM SD1010 SD1
             WHERE SD1.D_E_L_E_T_ = ''
-              AND SD1.D1_COD = ? {where_clause}
+            AND SD1.D1_COD = ? {where_extra}
         """
-        total_row = self.execute_one(count_query, tuple(params))
-        total_rows = int(total_row["total"] or 0)
 
-        # Dados paginados
-        query = f"""
-            SELECT 
-                SD1.*,
-                SA2.A2_NOME AS supplier_name
-            FROM SD1010 AS SD1
-            LEFT JOIN SA2010 AS SA2
-                ON SA2.A2_COD = SD1.D1_FORNECE AND SA2.D_E_L_E_T_ = ''
+        total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
+
+        # DATA
+        data_sql = f"""
+            SELECT
+                SD1.D1_FILIAL        AS filial,
+                SD1.D1_DOC           AS nota,
+                SD1.D1_SERIE         AS serie,
+                SD1.D1_ITEM          AS item,
+                SD1.D1_EMISSAO       AS data_emissao,
+
+                SD1.D1_COD           AS produto,
+                SB1.B1_DESC          AS descricao_produto,
+                SB1.B1_UM            AS unidade,
+
+                SD1.D1_FORNECE       AS fornecedor,
+                SA2.A2_NOME          AS fornecedor_nome,
+
+                SD1.D1_QUANT         AS quantidade,
+                CASE 
+                    WHEN SD1.D1_QUANT <> 0 
+                    THEN SD1.D1_TOTAL / SD1.D1_QUANT 
+                    ELSE 0 
+                END                  AS preco_unitario,
+                SD1.D1_TOTAL         AS valor_total
+
+            FROM SD1010 SD1
+            INNER JOIN SB1010 SB1
+                ON SB1.B1_COD = SD1.D1_COD
+            AND SB1.D_E_L_E_T_ = ''
+            LEFT JOIN SA2010 SA2
+                ON SA2.A2_COD = SD1.D1_FORNECE
+            AND SA2.A2_LOJA = SD1.D1_LOJA
+            AND SA2.D_E_L_E_T_ = ''
             WHERE SD1.D_E_L_E_T_ = ''
-              AND SD1.D1_COD = ? {where_clause}
+            AND SD1.D1_COD = ? {where_extra}
             ORDER BY SD1.D1_EMISSAO DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
-        params.extend([offset, page_size])
-        data = self.execute_query(query, tuple(params))
+
+        rows = self.execute_query(
+            data_sql,
+            tuple(params + [offset, page_size])
+        )
 
         return {
             "success": True,
-            "total": total_rows,
+            "total": total,
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
+            "totalPages": (total + page_size - 1) // page_size,
             "filters": {
                 "issue_date_start": issue_date_start,
                 "issue_date_end": issue_date_end,
                 "supplier": supplier,
                 "branch": branch
             },
-            "data": data
+            "data": rows
         }
-
 
     # -------------------------------
     # 🔹 OUTBOUND INVOICE ITEMS (Notas Fiscais de Saída)
@@ -855,75 +985,106 @@ class ProductRepository(BaseRepository):
         customer: Optional[str] = None,
         branch: Optional[str] = None
     ) -> dict:
+
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
 
         offset = (page - 1) * page_size
-        log_info(f"Listando NF-es de saída de {code}, página {page}, filtros aplicados.")
+        log_info(f"Listando NF-es de saída do produto {code}")
 
         filters = []
         params = [code]
 
         if issue_date_start:
-            filters.append("SD2.D2_EMISSAO >= ?")
             issue_date_start = self._convert_date_to_protheus(issue_date_start)
+            filters.append("SD2.D2_EMISSAO >= ?")
             params.append(issue_date_start)
+
         if issue_date_end:
-            filters.append("SD2.D2_EMISSAO <= ?")
             issue_date_end = self._convert_date_to_protheus(issue_date_end)
+            filters.append("SD2.D2_EMISSAO <= ?")
             params.append(issue_date_end)
+
         if customer:
             filters.append("SD2.D2_CLIENTE = ?")
             params.append(customer)
+
         if branch:
             filters.append("SD2.D2_FILIAL = ?")
             params.append(branch)
 
-        where_clause = " AND ".join(filters)
-        if where_clause:
-            where_clause = " AND " + where_clause
+        where_extra = ""
+        if filters:
+            where_extra = " AND " + " AND ".join(filters)
 
-        # Contagem total
-        count_query = f"""
+        # -----------------------------
+        # COUNT
+        # -----------------------------
+        count_sql = f"""
             SELECT COUNT(*) AS total
-            FROM SD2010 AS SD2
+            FROM SD2010 SD2
             WHERE SD2.D_E_L_E_T_ = ''
-              AND SD2.D2_COD = ? {where_clause}
+            AND SD2.D2_COD = ? {where_extra}
         """
-        total_row = self.execute_one(count_query, tuple(params))
-        total_rows = int(total_row["total"] or 0)
 
-        # Dados paginados
-        query = f"""
-            SELECT 
-                SD2.*,
-                SA1.A1_NOME AS customer_name
-            FROM SD2010 AS SD2
-            LEFT JOIN SA1010 AS SA1
-                ON SA1.A1_COD = SD2.D2_CLIENTE AND SA1.D_E_L_E_T_ = ''
+        total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
+
+        # -----------------------------
+        # DATA
+        # -----------------------------
+        data_sql = f"""
+            SELECT
+                SD2.D2_FILIAL        AS filial,
+                SD2.D2_DOC           AS nota,
+                SD2.D2_SERIE         AS serie,
+                SD2.D2_ITEM          AS item,
+                SD2.D2_EMISSAO       AS data_emissao,
+
+                SD2.D2_COD           AS produto,
+                SB1.B1_DESC          AS descricao_produto,
+                SB1.B1_UM            AS unidade,
+
+                SD2.D2_CLIENTE       AS cliente,
+                SA1.A1_NOME          AS cliente_nome,
+
+                SD2.D2_QUANT         AS quantidade,
+                SD2.D2_PRCVEN        AS preco_unitario,
+                (SD2.D2_QUANT * SD2.D2_PRCVEN) AS valor_total
+
+            FROM SD2010 SD2
+            INNER JOIN SB1010 SB1
+                ON SB1.B1_COD = SD2.D2_COD
+            AND SB1.D_E_L_E_T_ = ''
+            LEFT JOIN SA1010 SA1
+                ON SA1.A1_COD = SD2.D2_CLIENTE
+            AND SA1.A1_LOJA = SD2.D2_LOJA
+            AND SA1.D_E_L_E_T_ = ''
             WHERE SD2.D_E_L_E_T_ = ''
-              AND SD2.D2_COD = ? {where_clause}
+            AND SD2.D2_COD = ? {where_extra}
             ORDER BY SD2.D2_EMISSAO DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
-        params.extend([offset, page_size])
-        data = self.execute_query(query, tuple(params))
+
+        rows = self.execute_query(
+            data_sql,
+            tuple(params + [offset, page_size])
+        )
 
         return {
             "success": True,
-            "total": total_rows,
+            "total": total,
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
+            "totalPages": (total + page_size - 1) // page_size,
             "filters": {
                 "issue_date_start": issue_date_start,
                 "issue_date_end": issue_date_end,
                 "customer": customer,
                 "branch": branch
             },
-            "data": data
+            "data": rows
         }
 
     # -------------------------------
@@ -944,6 +1105,7 @@ class ProductRepository(BaseRepository):
             raise ValueError("page_size must be between 1 and 500")
 
         offset = (page - 1) * page_size
+
         filters = ["SB2.D_E_L_E_T_ = ''", "SB2.B2_COD = ?"]
         params = [code]
 
@@ -957,40 +1119,47 @@ class ProductRepository(BaseRepository):
 
         where_clause = " AND ".join(filters)
 
-        # Contagem total
-        count_query = f"""
+        count_sql = f"""
             SELECT COUNT(*) AS total
-            FROM SB2010 AS SB2
+            FROM SB2010 SB2
             WHERE {where_clause}
         """
-        total_row = self.execute_one(count_query, tuple(params))
-        total_rows = int(total_row["total"] or 0)
 
-        # Dados paginados
-        data_query = f"""
-            SELECT 
-                *
-            FROM SB2010 AS SB2
+        total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
+
+        data_sql = f"""
+            SELECT
+                SB2.B2_COD      AS produto,
+                SB2.B2_FILIAL   AS filial,
+                SB2.B2_LOCAL    AS local,
+                SB2.B2_QATU     AS saldo,
+                SB2.B2_QEMP     AS empenhado,
+                SB2.B2_RESERVA  AS reservado,
+                (SB2.B2_QATU - SB2.B2_QEMP - SB2.B2_RESERVA) AS disponivel
+            FROM SB2010 SB2
             WHERE {where_clause}
             ORDER BY SB2.B2_FILIAL, SB2.B2_LOCAL
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        params.extend([offset, page_size])
-        rows = self.execute_query(data_query, tuple(params))
+        rows = self.execute_query(
+            data_sql,
+            tuple(params + [offset, page_size])
+        )
 
         return {
             "success": True,
-            "total": total_rows,
+            "total": total,
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
+            "totalPages": (total + page_size - 1) // page_size,
             "filters": {
                 "branch": branch,
                 "location": location
             },
             "data": rows
         }
+
 
     # -------------------------------
     # 🔹 GUIDE (SG2010)
@@ -1523,72 +1692,404 @@ class ProductRepository(BaseRepository):
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
 
-        log_info(f"Listando clientes amarrados ao produto {code}, página {page}, tamanho {page_size}")
         offset = (page - 1) * page_size
 
-        # Contagem total
-        count_query = """
+        count_sql = """
             SELECT COUNT(*) AS total
-            FROM SA7010 AS SA7
-            INNER JOIN SA1010 AS SA1
-                ON SA1.A1_COD = SA7.A7_CLIENTE
-            AND SA1.A1_LOJA = SA7.A7_LOJA
-            AND SA1.D_E_L_E_T_ = ''
-            WHERE SA7.D_E_L_E_T_ = ''
-            AND SA7.A7_PRODUTO = ?
+            FROM SA7010
+            WHERE D_E_L_E_T_ = ''
+            AND A7_PRODUTO = ?
         """
-        total_row = self.execute_one(count_query, (code,))
-        total_rows = int(total_row["total"] or 0)
 
-        # Consulta paginada
-        query = """
-            SELECT 
-                SA1.A1_COD,
-                SA1.A1_NOME,
-                SA1.A1_NREDUZ,
-                SA1.A1_MSBLQL,
-                SA1.A1_LOJA,
-                SA7.A7_PRODUTO,
-                SA7.A7_CODCLI,
-                SA7.A7_DESCCLI,
-                SA7.A7_PRECO01,
-                SA7.A7_DTREF01,
-                SA7.A7_PRECO02,
-                SA7.A7_DTREF02,
-                SA7.A7_PRECO03,
-                SA7.A7_DTREF03,
-                SA7.A7_PRECO04,
-                SA7.A7_DTREF04,
-                SA7.A7_PRECO05,
-                SA7.A7_DTREF05,
-                SA7.A7_PRECO06,
-                SA7.A7_DTREF06,
-                SA7.A7_PRECO07,
-                SA7.A7_DTREF07,
-                SA7.A7_PRECO08,
-                SA7.A7_DTREF08,
-                SA7.A7_PRECO09,
-                SA7.A7_DTREF09
-            FROM SA7010 AS SA7
-            INNER JOIN SA1010 AS SA1
+        total = int(self.execute_one(count_sql, (code,))["total"] or 0)
+
+        sql = """
+            WITH LAST_SALE AS (
+                SELECT
+                    SD2.D2_COD,
+                    SD2.D2_CLIENTE,
+                    SD2.D2_LOJA,
+                    MAX(SD2.D2_EMISSAO) AS data_ultima_venda,
+                    SUM(SD2.D2_QUANT)   AS quantidade_total,
+                    AVG(SD2.D2_PRCVEN) AS preco_medio
+                FROM SD2010 SD2
+                WHERE
+                    SD2.D_E_L_E_T_ = ''
+                    AND SD2.D2_COD = ?
+                GROUP BY
+                    SD2.D2_COD,
+                    SD2.D2_CLIENTE,
+                    SD2.D2_LOJA
+            )
+
+            SELECT
+                -- PRODUTO
+                SB1.B1_COD          AS produto,
+                SB1.B1_DESC         AS descricao_produto,
+                SB1.B1_UM           AS unidade,
+
+                -- CLIENTE
+                SA1.A1_COD          AS cliente,
+                SA1.A1_LOJA         AS loja,
+                SA1.A1_NOME         AS cliente_nome,
+                SA1.A1_MSBLQL       AS bloqueado,
+
+                -- AMARRAÇÃO
+                SA7.A7_CODCLI       AS codigo_produto_cliente,
+                SA7.A7_DESCCLI      AS descricao_produto_cliente,
+
+                -- PREÇO CADASTRADO (exemplo: preço 01)
+                SA7.A7_PRECO01      AS preco_cadastrado,
+                SA7.A7_DTREF01      AS data_preco_cadastrado,
+
+                -- VENDA REAL
+                LS.preco_medio      AS ultimo_preco_vendido,
+                LS.data_ultima_venda,
+                LS.quantidade_total
+
+            FROM SA7010 SA7
+            INNER JOIN SA1010 SA1
                 ON SA1.A1_COD = SA7.A7_CLIENTE
             AND SA1.A1_LOJA = SA7.A7_LOJA
             AND SA1.D_E_L_E_T_ = ''
-            WHERE SA7.D_E_L_E_T_ = ''
-            AND SA7.A7_PRODUTO = ?
-            ORDER BY SA7.A7_CLIENTE, SA7.A7_LOJA
+
+            INNER JOIN SB1010 SB1
+                ON SB1.B1_COD = SA7.A7_PRODUTO
+            AND SB1.D_E_L_E_T_ = ''
+
+            LEFT JOIN LAST_SALE LS
+                ON LS.D2_COD = SA7.A7_PRODUTO
+            AND LS.D2_CLIENTE = SA7.A7_CLIENTE
+            AND LS.D2_LOJA = SA7.A7_LOJA
+
+            WHERE
+                SA7.D_E_L_E_T_ = ''
+                AND SA7.A7_PRODUTO = ?
+
+            ORDER BY
+                SA1.A1_NOME
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
-        data = self.execute_query(query, (code, offset, page_size))
+
+        rows = self.execute_query(
+            sql,
+            (code, code, offset, page_size)
+        )
 
         return {
             "success": True,
-            "total": total_rows,
+            "total": total,
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
-            "data": data
+            "totalPages": (total + page_size - 1) // page_size,
+            "data": rows
         }
+
+
+    # -------------------------------
+    # 🔹 PURCHASES (SC7010/SA2010) 
+    # -------------------------------
+    def list_purchases(
+        self,
+        code: str,
+        page: int = 1,
+        page_size: int = 50
+    ) -> dict:
+
+        if page < 1:
+            raise ValueError("page must be >= 1")
+        if not 1 <= page_size <= 500:
+            raise ValueError("page_size must be between 1 and 500")
+
+        offset = (page - 1) * page_size
+
+        # --------------------------------
+        # COUNT (pedidos de compra)
+        # --------------------------------
+        count_sql = """
+            SELECT COUNT(DISTINCT C7.C7_NUM) AS total
+            FROM SC7010 C7
+            WHERE
+                C7.D_E_L_E_T_ = ''
+                AND C7.C7_PRODUTO = ?
+        """
+
+        total = int(
+            self.execute_one(count_sql, (code,))["total"] or 0
+        )
+
+        # --------------------------------
+        # DATA
+        # --------------------------------
+        sql = """
+            SELECT
+                C7.C7_NUM            AS pedido,
+                C7.C7_FILIAL         AS filial,
+                C7.C7_EMISSAO        AS data_emissao,
+                C7.C7_FORNECE        AS fornecedor,
+                C7.C7_LOJA           AS loja,
+                SA2.A2_NOME          AS fornecedor_nome,
+                C7.C7_PRODUTO        AS produto,
+                SUM(C7.C7_QUANT)     AS quantidade_pedida,
+                AVG(C7.C7_PRECO)     AS preco_unitario
+            FROM SC7010 C7
+            LEFT JOIN SA2010 SA2
+                ON SA2.A2_COD = C7.C7_FORNECE
+            AND SA2.A2_LOJA = C7.C7_LOJA
+            AND SA2.D_E_L_E_T_ = ''
+            WHERE
+                C7.D_E_L_E_T_ = ''
+                AND C7.C7_PRODUTO = ?
+            GROUP BY
+                C7.C7_NUM,
+                C7.C7_FILIAL,
+                C7.C7_EMISSAO,
+                C7.C7_FORNECE,
+                C7.C7_LOJA,
+                SA2.A2_NOME,
+                C7.C7_PRODUTO
+            ORDER BY
+                C7.C7_EMISSAO DESC
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+
+        rows = self.execute_query(
+            sql,
+            (code, offset, page_size)
+        )
+
+        return {
+            "success": True,
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
+            "totalPages": (total + page_size - 1) // page_size,
+            "data": rows
+        }
+
+    # -------------------------------
+    # 🔹 SALES SUMMARY
+    # -------------------------------
+    def get_sales_summary(self, code: str) -> dict:
+        """
+        Resumo consolidado de vendas realizadas.
+        Base: SD2010
+        """
+
+        # -------------------------------------------------
+        # Produto (descrição / unidade)
+        # -------------------------------------------------
+        product_sql = """
+            SELECT
+                B1_COD,
+                B1_DESC,
+                B1_UM
+            FROM SB1010
+            WHERE D_E_L_E_T_ = ''
+            AND B1_COD = ?
+        """
+        product = self.execute_one(product_sql, (code,))
+
+        # -------------------------------------------------
+        # Resumo de vendas (itens faturados)
+        # -------------------------------------------------
+        sales_sql = """
+            SELECT
+                SUM(SD2.D2_QUANT)          AS quantidade_total,
+                SUM(SD2.D2_TOTAL)          AS valor_total,
+                AVG(SD2.D2_PRCVEN)         AS preco_medio,
+                COUNT(DISTINCT SD2.D2_DOC) AS total_documentos,
+                MIN(SD2.D2_EMISSAO)        AS primeira_venda,
+                MAX(SD2.D2_EMISSAO)        AS ultima_venda
+            FROM SD2010 SD2
+            WHERE
+                SD2.D_E_L_E_T_ = ''
+                AND SD2.D2_COD = ?
+        """
+
+        summary = self.execute_one(sales_sql, (code,))
+
+        return {
+            "success": True,
+            "product": {
+                "code": code,
+                "description": product["B1_DESC"] if product else None,
+                "unit": product["B1_UM"] if product else None
+            },
+            "summary": {
+                "total_quantity": float(summary["quantidade_total"] or 0),
+                "total_value": float(summary["valor_total"] or 0),
+                "average_price": float(summary["preco_medio"] or 0),
+                "documents": int(summary["total_documentos"] or 0),
+                "first_sale": summary["primeira_venda"],
+                "last_sale": summary["ultima_venda"]
+            }
+        }
+
+    def get_sales_open_orders(self, code: str) -> dict:
+        """
+        Carteira de pedidos de venda (itens em aberto).
+        Base: SC6010
+        """
+
+        sql = """
+            SELECT
+                SUM(C6.C6_QTDVEN)                       AS quantidade_aberta,
+                SUM(C6.C6_QTDVEN * C6.C6_PRCVEN)        AS valor_aberto,
+                COUNT(DISTINCT C6.C6_NUM)               AS total_pedidos
+            FROM SC6010 C6
+            WHERE
+                C6.D_E_L_E_T_ = ''
+                AND C6.C6_PRODUTO = ?
+                AND C6.C6_QTDVEN > 0
+        """
+
+        row = self.execute_one(sql, (code,))
+
+        return {
+            "success": True,
+            "open_orders": {
+                "quantity": float(row["quantidade_aberta"] or 0),
+                "value": float(row["valor_aberto"] or 0),
+                "orders": int(row["total_pedidos"] or 0)
+            }
+        }
+
+    def get_sales_billing(self, code: str) -> dict:
+        """
+        Resumo de faturamento financeiro por produto.
+        Base: SD2010 (itens faturados)
+        """
+
+        sql = """
+            SELECT
+                SUM(SD2.D2_TOTAL)          AS valor_faturado,
+                COUNT(DISTINCT SD2.D2_DOC) AS documentos,
+                MIN(SD2.D2_EMISSAO)        AS primeiro_faturamento,
+                MAX(SD2.D2_EMISSAO)        AS ultimo_faturamento
+            FROM SD2010 SD2
+            WHERE
+                SD2.D_E_L_E_T_ = ''
+                AND SD2.D2_COD = ?
+        """
+
+        row = self.execute_one(sql, (code,))
+
+        return {
+            "success": True,
+            "billing": {
+                "value": float(row["valor_faturado"] or 0),
+                "documents": int(row["documentos"] or 0),
+                "first_billing": row["primeiro_faturamento"],
+                "last_billing": row["ultimo_faturamento"]
+            }
+        }
+
+    def get_product_pricing(self, code: str) -> dict:
+        """
+        Retorna os preços comerciais do produto.
+
+        Bases REAIS:
+        - DA1010 → preços por produto
+        - DA0010 → descrição da tabela de preço
+        - SB1010 → descrição e unidade do produto
+        """
+
+        # -------------------------------------------------
+        # Produto
+        # -------------------------------------------------
+        product_sql = """
+            SELECT
+                B1_COD,
+                B1_DESC,
+                B1_UM
+            FROM SB1010
+            WHERE D_E_L_E_T_ = ''
+            AND B1_COD = ?
+        """
+        product = self.execute_one(product_sql, (code,))
+
+        if not product:
+            return {
+                "success": False,
+                "message": f"Produto {code} não encontrado"
+            }
+
+        # -------------------------------------------------
+        # Preços
+        # -------------------------------------------------
+        pricing_sql = """
+            SELECT
+                DA1.DA1_CODTAB        AS tabela_codigo,
+                DA0.DA0_DESCRI        AS tabela_descricao,
+
+                DA1.DA1_PRCVEN        AS preco_venda,
+                DA1.DA1_PRCMAX        AS preco_maximo,
+
+                DA1.DA1_VLRDES        AS desconto_valor,
+                DA1.DA1_PERDES        AS desconto_percentual,
+
+                DA1.DA1_QTDLOT        AS quantidade_lote,
+                DA1.DA1_ESTADO        AS estado,
+                DA1.DA1_TPOPER        AS tipo_operacao,
+                DA1.DA1_MOEDA         AS moeda,
+
+                DA1.DA1_DATVIG        AS data_vigencia,
+                DA1.DA1_ATIVO         AS ativo
+            FROM DA1010 DA1
+            INNER JOIN DA0010 DA0
+                ON DA0.DA0_FILIAL = DA1.DA1_FILIAL
+            AND DA0.DA0_CODTAB = DA1.DA1_CODTAB
+            AND DA0.D_E_L_E_T_ = ''
+            WHERE
+                DA1.D_E_L_E_T_ = ''
+                AND DA1.DA1_CODPRO = ?
+            ORDER BY
+                DA1.DA1_CODTAB,
+                DA1.DA1_DATVIG DESC
+        """
+
+        rows = self.execute_query(pricing_sql, (code,))
+
+        return {
+            "success": True,
+            "product": {
+                "code": product["B1_COD"],
+                "description": product["B1_DESC"],
+                "unit": product["B1_UM"]
+            },
+            "prices": [
+                {
+                    "table": {
+                        "code": r["tabela_codigo"],
+                        "description": r["tabela_descricao"]
+                    },
+                    "price": {
+                        "sale": float(r["preco_venda"] or 0),
+                        "max": float(r["preco_maximo"] or 0)
+                    },
+                    "discount": {
+                        "value": float(r["desconto_valor"] or 0),
+                        "percent": float(r["desconto_percentual"] or 0)
+                    },
+                    "conditions": {
+                        "quantity_lot": r["quantidade_lote"],
+                        "state": r["estado"],
+                        "operation_type": r["tipo_operacao"],
+                        "currency": r["moeda"]
+                    },
+                    "validity": {
+                        "date": r["data_vigencia"],
+                        "active": r["ativo"] == "1"
+                    }
+                }
+                for r in rows
+            ]
+        }
+
+
+
+
 
     def _convert_date_to_protheus(self, date_value: Optional[Union[str, datetime]]) -> Optional[str]:
         """

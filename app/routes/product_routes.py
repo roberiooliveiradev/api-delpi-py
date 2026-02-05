@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers, get_structure_excel
-from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products, search_products_by_description
+from app.services.product_service import get_suppliers, get_inbound_invoice_items
+from app.services.product_service import get_outbound_invoice_items, get_stock, search_products, search_products_by_description
+from app.services.product_service import get_purchases, get_sales_summary, get_sales_open_orders, get_sales_billing, get_product_pricing
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
@@ -237,7 +239,109 @@ def outbound_invoice_items(
     except Exception as e:
         log_error(f"Erro ao consultar NF-es de saída para {code}: {e}")
         return error_response(f"Unexpected error: {e}")
-    
+
+@router.get(
+    "/{code}/purchases",
+    summary="Histórico resumido de compras do produto"
+)
+def purchases(
+    code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500)
+):
+    try:
+        result = get_purchases(code, page, page_size)
+        return success_response(
+            data=result,
+            message=f"Histórico de compras de {code} retornado com sucesso (página {page}/{result['totalPages']})."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar compras do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+# --------------------------------------------------
+# SALES
+# --------------------------------------------------
+
+@router.get(
+    "/{code}/sales",
+    summary="Resumo consolidado de vendas do produto"
+)
+def product_sales_summary(code: str):
+    """
+    Retorna o resumo consolidado de vendas realizadas do produto.
+    Base: SD2010
+    """
+    try:
+        result = get_sales_summary(code)
+        return success_response(
+            data=result,
+            message=f"Resumo de vendas do produto {code} retornado com sucesso."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar vendas do produto {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+
+@router.get(
+    "/{code}/sales/open-orders",
+    summary="Carteira de pedidos de venda do produto"
+)
+def product_sales_open_orders(code: str):
+    """
+    Retorna a carteira de pedidos de venda (abertos).
+    Base: SC5010
+    """
+    try:
+        result = get_sales_open_orders(code)
+        return success_response(
+            data=result,
+            message=f"Carteira de pedidos do produto {code} retornada com sucesso."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar carteira do produto {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+
+@router.get(
+    "/{code}/sales/billing",
+    summary="Resumo de faturamento do produto"
+)
+def product_sales_billing(code: str):
+    """
+    Retorna o resumo de faturamento financeiro do produto.
+    Base: SF2010
+    """
+    try:
+        result = get_sales_billing(code)
+        return success_response(
+            data=result,
+            message=f"Faturamento do produto {code} retornado com sucesso."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar faturamento do produto {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+@router.get(
+    "/{code}/pricing",
+    summary="Preços comerciais do produto"
+)
+def product_pricing(code: str):
+    """
+    Retorna os preços do produto conforme tabelas comerciais.
+    Base: DA1010 / DA3010
+    """
+    try:
+        result = get_product_pricing(code)
+        return success_response(
+            data=result,
+            message=f"Preços do produto {code} retornados com sucesso."
+        )
+    except Exception as e:
+        log_error(f"Erro ao consultar preços do produto {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+
 @router.get("/{code}/stock", summary="Consulta o estoque de um produto com filtros e paginação")
 def stock(
     code: str,

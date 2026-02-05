@@ -661,3 +661,84 @@ def get_structure_excel(code: str) -> io.BytesIO:
     wb.save(stream)
     stream.seek(0)
     return stream
+
+
+def get_purchases(
+    code: str,
+    page: int = 1,
+    page_size: int = 50
+) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando histórico de compras do produto {code}")
+
+    try:
+        return repo.list_purchases(code, page, page_size)
+    except Exception as e:
+        log_error(f"Erro ao listar compras do produto {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+
+# --------------------------------------------------
+# SALES
+# --------------------------------------------------
+
+def get_sales_summary(code: str) -> dict:
+    """
+    Resumo consolidado de vendas realizadas
+    Base: SD2010
+    """
+    repo = ProductRepository()
+    log_info(f"Buscando resumo de vendas do produto {code}")
+
+    try:
+        return repo.get_sales_summary(code)
+    except Exception as e:
+        log_error(f"Erro ao buscar resumo de vendas do produto {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+
+
+def get_sales_open_orders(code: str) -> dict:
+    """
+    Carteira de pedidos de venda (abertos)
+    Base: SC5010
+    """
+    repo = ProductRepository()
+    log_info(f"Buscando carteira de pedidos do produto {code}")
+
+    try:
+        return repo.get_sales_open_orders(code)
+    except Exception as e:
+        log_error(f"Erro ao buscar carteira de pedidos do produto {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+
+
+def get_sales_billing(code: str) -> dict:
+    """
+    Resumo de faturamento financeiro
+    Base: SF2010
+    """
+    repo = ProductRepository()
+    log_info(f"Buscando faturamento do produto {code}")
+
+    try:
+        return repo.get_sales_billing(code)
+    except Exception as e:
+        log_error(f"Erro ao buscar faturamento do produto {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+
+
+
+def get_product_pricing(code: str) -> dict:
+    """
+    Serviço de preços do produto.
+    """
+    if not code:
+        raise ValueError("Product code is required")
+
+    repo = ProductRepository()
+    log_info(f"Consultando preços do produto {code}")
+
+    try:
+        return repo.get_product_pricing(code)
+    except Exception as e:
+        log_error(f"Erro ao consultar preços do produto {code}: {e}")
+        raise DatabaseConnectionError(str(e))
