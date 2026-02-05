@@ -329,7 +329,7 @@ def product_sales_billing(code: str):
 def product_pricing(code: str):
     """
     Retorna os preços do produto conforme tabelas comerciais.
-    Base: DA1010 / DA3010
+    Base: DA1010
     """
     try:
         result = get_product_pricing(code)
