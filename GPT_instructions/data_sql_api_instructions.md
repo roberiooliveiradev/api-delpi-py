@@ -218,23 +218,96 @@ Quando o agente precisar consultar dados SQL puros:
 
 ## 📗 Exemplos de solicitações
 
-### 1. Usuário: "Listar produtos programados para produzir hoje"
+---
+
+### 1. Usuário: **“Listar produtos programados para produzir hoje”**
+
+#### 🎯 Objetivo
+
+Listar os **produtos que possuem ordens de produção programadas para execução no dia**, considerando apenas **ordens ativas**, com **prioridade livre**, permitindo identificar rapidamente **o que está planejado para produzir hoje** por filial.
+
+A consulta tem como finalidade:
+
+- fornecer a **lista diária de produtos programados**;
+- apoiar o **planejamento e acompanhamento do PCP**;
+- garantir visibilidade do **plano de produção real do dia**;
+- considerar apenas **produtos acabados válidos**.
+
+---
 
 #### 🧱 Tabelas envolvidas
 
--   SC2010 — Ordens de Produção
--   SH8010 — Operações Alocadas
--   SD4010 — Requisições Empenhadas
--   SB1010 — Cadastro de produtos
+##### SC2010 — Ordens de Produção
 
-⚙️ Condições aplicadas
+| Coluna      | Descrição |
+|------------|-----------|
+| C2_OP      | Ordem de produção |
+| C2_PRODUTO | Código do produto |
+| C2_QUANT   | Quantidade planejada |
+| C2_UM      | Unidade de medida |
+| C2_PRIOR   | Prioridade da OP |
+| C2_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
--   H8.H8_DTINI = data atual
--   Filial = 01 ou 02 
--   C2_PRIOR = 500 (Prioridade Livre)
--   Somente registros ativos (`D_E_L_E_T_ = ''`)
+---
 
-#### 💾 Consulta:
+##### SH8010 — Operações Alocadas
+
+| Coluna      | Descrição |
+|------------|-----------|
+| H8_OP      | Ordem de produção |
+| H8_OPER    | Operação |
+| H8_DTINI   | Data de início da operação |
+| H8_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SD4010 — Requisições / Empenhos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| D4_OP      | Ordem de produção |
+| D4_OPERAC  | Operação |
+| D4_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| B1_TIPO    | Tipo do produto (PA) |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Operação programada para **hoje**  
+  - `H8_DTINI = :DATA`
+
+- Apenas OPs com prioridade **Livre**  
+  - `C2_PRIOR = '500'`
+
+- Apenas **produtos acabados**  
+  - `B1_TIPO = 'PA'`
+
+- Filial analisada  
+  - `:FILIAL` (ex.: 01 ou 02)
+
+- Considerar somente registros ativos  
+  - `SC2010.D_E_L_E_T_ = ''`  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SH8010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`
+
+---
+
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -269,28 +342,103 @@ GROUP BY
     OP.C2_UM,
     OA.H8_DTINI
 ORDER BY
-    OP.C2_PRODUTO ASC
+    OP.C2_PRODUTO ASC;
 ```
 
+---
 
-### 2. Usuário: "Listar OPs (ordens de produção) finalizadas hoje"
+### 2. Usuário: **“Listar OPs (ordens de produção) finalizadas hoje”**
 
-#### 🧱 Tabelas envolvidas:
+#### 🎯 Objetivo
 
--   SC2010 — Ordens de Produção
--   SD4010 — Empenhos de componentes
--   SB1010 — Cadastro de produtos
--   SH8010 — Roteiro de operações
+Listar as **ordens de produção (OPs) finalizadas no dia**, considerando apenas **ordens ativas**, com **prioridade livre**, cuja **operação esteja programada para a data informada**.
 
-⚙️ Condições aplicadas:
+A consulta tem como finalidade:
 
--   OP.C2_QUANT = OP.C2_QUJE → total necessário produzido
--   OA.H8_DTINI = 20251127 → operação de hoje
--   Filial = 01 ou 02 → Pergunte a filial ao usuário
--   Todos os registros ativos (`D_E_L_E_T_ = ''`)
--   OP.C2_PRIOR = 500 → prioridade Livre (501 Bloqueado)
+- identificar **produção efetivamente concluída no dia**;
+- apoiar o **acompanhamento diário do PCP e da produção**;
+- permitir análise por **Centro de Trabalho (CT)**;
+- garantir que apenas **ordens válidas e encerradas** sejam consideradas.
 
-#### 💾 Consulta:
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SC2010 — Ordens de Produção
+
+| Coluna      | Descrição |
+|------------|-----------|
+| C2_OP      | Ordem de produção |
+| C2_PRODUTO | Código do produto |
+| C2_QUANT   | Quantidade planejada |
+| C2_QUJE    | Quantidade produzida |
+| C2_UM      | Unidade de medida |
+| C2_PRIOR   | Prioridade da OP |
+| C2_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SD4010 — Empenhos de Componentes
+
+| Coluna      | Descrição |
+|------------|-----------|
+| D4_OP      | Ordem de produção |
+| D4_OPERAC  | Operação |
+| D4_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SH8010 — Operações Alocadas
+
+| Coluna      | Descrição |
+|------------|-----------|
+| H8_OP      | Ordem de produção |
+| H8_OPER    | Operação |
+| H8_DTINI   | Data de início da operação |
+| H8_DTFIM   | Data de término da operação |
+| H8_HRINI   | Hora de início |
+| H8_HRFIM   | Hora de término |
+| H8_CTRAB   | Centro de Trabalho |
+| H8_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Ordem **finalizada**  
+  - `C2_QUANT = C2_QUJE`
+
+- Operação programada para **hoje**  
+  - `H8_DTINI = :DATA`
+
+- Apenas OPs com prioridade **Livre**  
+  - `C2_PRIOR = '500'`
+
+- Filial analisada  
+  - `:FILIAL` (ex.: 01 ou 02)
+
+- Considerar somente registros ativos  
+  - `SC2010.D_E_L_E_T_ = ''`  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`  
+  - `SH8010.D_E_L_E_T_ = ''`
+
+---
+
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -315,15 +463,15 @@ INNER JOIN SH8010 OA
    AND OA.H8_OPER = RE.D4_OPERAC
 WHERE
     OP.D_E_L_E_T_ = ''
-AND RE.D_E_L_E_T_ = ''
-AND P.D_E_L_E_T_  = ''
-AND OA.D_E_L_E_T_ = ''
-AND OP.C2_QUANT   = OP.C2_QUJE        
-AND OP.C2_PRIOR   = '500'             
-AND OP.C2_FILIAL  = :FILIAL
-AND RE.D4_FILIAL  = :FILIAL
-AND OA.H8_FILIAL  = :FILIAL
-AND OA.H8_DTINI   = :DATA
+    AND RE.D_E_L_E_T_ = ''
+    AND P.D_E_L_E_T_  = ''
+    AND OA.D_E_L_E_T_ = ''
+    AND OP.C2_QUANT   = OP.C2_QUJE
+    AND OP.C2_PRIOR   = '500'
+    AND OP.C2_FILIAL  = :FILIAL
+    AND RE.D4_FILIAL  = :FILIAL
+    AND OA.H8_FILIAL  = :FILIAL
+    AND OA.H8_DTINI   = :DATA
 GROUP BY
     OP.C2_OP,
     OP.C2_PRODUTO,
@@ -341,24 +489,110 @@ ORDER BY
     OP.C2_OP   ASC;
 ```
 
-### 3. Usuário: "Listar OPs programadas em aberto (não finalizadas) de hoje"
+---
 
-#### 🧱 Tabelas envolvidas:
+### 3. Usuário: **“Listar OPs programadas em aberto (não finalizadas) de hoje”**
 
--   SC2010 — Ordens de Produção
--   SD4010 — Empenhos de componentes
--   SB1010 — Cadastro de produtos
--   SH8010 — Roteiro de operações
+#### 🎯 Objetivo
 
-⚙️ Condições aplicadas:
+Listar as **ordens de produção (OPs) programadas para o dia** que **ainda não foram finalizadas**, considerando apenas **ordens ativas**, com **prioridade livre**, permitindo acompanhamento operacional diário por **Centro de Trabalho (CT)**.
 
--   OP.C2_QUANT > OP.C2_QUJE → não finalizada
--   OA.H8_DTINI = 20251127 → operação de hoje
--   Filial = 01 ou 02 → Pergunte a filial ao usuário
--   Todos os registros ativos (`D_E_L_E_T_ = ''`)
--   OP.C2_PRIOR = 500 → prioridade Livre (501 Bloqueado)
+A consulta tem como finalidade:
 
-#### 💾 Consulta:
+- identificar o **backlog real do dia**;
+- acompanhar ordens **em execução ou pendentes**;
+- apoiar o **controle de produção e PCP**;
+- fornecer visão clara de **quantidade planejada, produzida e faltante**.
+
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SC2010 — Ordens de Produção
+
+| Coluna      | Descrição |
+|------------|-----------|
+| C2_OP      | Ordem de produção |
+| C2_PRODUTO | Código do produto |
+| C2_QUANT   | Quantidade planejada |
+| C2_QUJE    | Quantidade produzida |
+| C2_UM      | Unidade de medida |
+| C2_PRIOR   | Prioridade da OP |
+| C2_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SD4010 — Empenhos de Componentes
+
+| Coluna      | Descrição |
+|------------|-----------|
+| D4_OP      | Ordem de produção |
+| D4_OPERAC  | Operação |
+| D4_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SH8010 — Operações Alocadas
+
+| Coluna      | Descrição |
+|------------|-----------|
+| H8_OP      | Ordem de produção |
+| H8_OPER    | Operação |
+| H8_DTINI   | Data de início da operação |
+| H8_HRINI   | Hora de início |
+| H8_CTRAB   | Centro de Trabalho |
+| H8_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Ordem **em aberto** (não finalizada)  
+  - `C2_QUANT > C2_QUJE`
+
+- Operação programada para **hoje**  
+  - `H8_DTINI = :DATA`
+
+- Apenas OPs com prioridade **Livre**  
+  - `C2_PRIOR = '500'`
+
+- Filial analisada  
+  - `:FILIAL` (ex.: 01 ou 02)
+
+- Considerar somente registros ativos  
+  - `SC2010.D_E_L_E_T_ = ''`  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`  
+  - `SH8010.D_E_L_E_T_ = ''`
+
+---
+
+#### 📐 Regra de cálculo da quantidade faltante
+
+A quantidade faltante é calculada a partir da diferença entre o planejado e o produzido:
+
+```text
+(C2_QUANT - C2_QUJE)
+```
+
+A expressão é ajustada para preservar casas decimais conforme a unidade do produto.
+
+---
+
+#### 💾 Consulta
 
 ```sql
 SELECT
@@ -382,15 +616,15 @@ INNER JOIN SH8010 OA
    AND OA.H8_OPER = RE.D4_OPERAC
 WHERE
     OP.D_E_L_E_T_ = ''
-AND RE.D_E_L_E_T_ = ''
-AND P.D_E_L_E_T_  = ''
-AND OA.D_E_L_E_T_ = ''
-AND OP.C2_QUANT  > OP.C2_QUJE
-AND OP.C2_PRIOR  = '500'
-AND OP.C2_FILIAL = :FILIAL
-AND RE.D4_FILIAL = :FILIAL
-AND OA.H8_FILIAL = :FILIAL
-AND OA.H8_DTINI  = :DATA
+    AND RE.D_E_L_E_T_ = ''
+    AND P.D_E_L_E_T_  = ''
+    AND OA.D_E_L_E_T_ = ''
+    AND OP.C2_QUANT  > OP.C2_QUJE
+    AND OP.C2_PRIOR  = '500'
+    AND OP.C2_FILIAL = :FILIAL
+    AND RE.D4_FILIAL = :FILIAL
+    AND OA.H8_FILIAL = :FILIAL
+    AND OA.H8_DTINI  = :DATA
 GROUP BY
     OP.C2_OP,
     OP.C2_PRODUTO,
@@ -406,23 +640,84 @@ ORDER BY
     OP.C2_OP ASC;
 ```
 
+---
 
-### 4. Usuário: "Liste as OPs distintas em aberto."
+### 4. Usuário: **“Liste as OPs distintas em aberto”**
+
+#### 🎯 Objetivo
+
+Listar as **ordens de produção (OPs) distintas que se encontram em aberto**, ou seja, **não finalizadas**, considerando apenas ordens **ativas**, **prioridade livre** e **com operação programada para a data informada**.
+
+A consulta tem como finalidade:
+
+- identificar rapidamente o **backlog real de produção**;
+- apoiar o **controle operacional diário**;
+- fornecer base para **priorização e acompanhamento** das OPs em execução;
+- garantir que apenas ordens **válidas e ativas** sejam analisadas.
+
+---
 
 #### 🧱 Tabelas envolvidas
 
--   SC2010 — Ordens
--   SD4010 — Empenhos
--   SH8010 — Operações
+##### SC2010 — Ordens de Produção
 
-⚙️ Condições aplicadas
+| Coluna      | Descrição |
+|------------|-----------|
+| C2_OP      | Ordem de produção |
+| C2_QUANT   | Quantidade planejada |
+| C2_QUJE    | Quantidade produzida |
+| C2_PRIOR   | Prioridade da OP |
+| C2_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
--   DISTINCT OP.C2_OP
--   C2_QUANT > C2_QUJE
--   H8_DTINI = hoje
--   C2_PRIOR = 500
--   Filial = 01 ou 02
--   `D_E_L_E_T_ = ''`
+---
+
+##### SD4010 — Empenhos / Consumo
+
+| Coluna      | Descrição |
+|------------|-----------|
+| D4_OP      | Ordem de produção |
+| D4_OPERAC  | Operação |
+| D4_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SH8010 — Operações Alocadas
+
+| Coluna      | Descrição |
+|------------|-----------|
+| H8_OP      | Ordem de produção |
+| H8_OPER    | Operação |
+| H8_DTINI   | Data de início da operação |
+| H8_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Ordem **em aberto** (não finalizada)  
+  - `C2_QUANT > C2_QUJE`
+
+- Seleção de OPs **distintas**  
+  - `DISTINCT C2_OP`
+
+- Apenas OPs com prioridade **Livre**  
+  - `C2_PRIOR = '500'`
+
+- Data de execução da operação  
+  - `H8_DTINI = :DATA`
+
+- Filial analisada  
+  - `:FILIAL` (ex.: 01 ou 02)
+
+- Considerar somente registros ativos  
+  - `SC2010.D_E_L_E_T_ = ''`  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SH8010.D_E_L_E_T_ = ''`
+
+---
 
 #### 💾 Consulta
 
@@ -433,7 +728,7 @@ FROM SC2010 OP
 INNER JOIN SD4010 RE
     ON OP.C2_OP = RE.D4_OP
 INNER JOIN SH8010 OA
-    ON RE.D4_OP    = OA.H8_OP
+    ON RE.D4_OP     = OA.H8_OP
    AND RE.D4_OPERAC = OA.H8_OPER
 WHERE
     OP.D_E_L_E_T_ = ''
@@ -449,24 +744,89 @@ ORDER BY
     OP.C2_OP ASC;
 ```
 
+---
 
-### 5. Usuário: "Agrupar as ordens por centro de trabalho (CT) e contar finalizadas e não finalizadas."
+### 5. Usuário: **“Agrupar as ordens por centro de trabalho (CT) e contar finalizadas e não finalizadas”**
+
+
+#### 🎯 Objetivo
+
+Apurar a **quantidade de ordens de produção finalizadas e não finalizadas**, **agrupadas por Centro de Trabalho (CT)**, permitindo uma visão clara do **status produtivo por recurso** em uma data específica.
+
+A consulta tem como finalidade:
+
+- monitorar o **andamento da produção por CT**;
+- identificar **acúmulo de ordens não finalizadas**;
+- apoiar decisões de **balanceamento de carga e priorização**;
+- fornecer um **indicador consolidado** para gestão operacional.
+
+---
 
 #### 🧱 Tabelas envolvidas
 
--   SC2010
--   SD4010
--   SH8010
+##### SC2010 — Ordens de Produção
 
-⚙️ Condições aplicadas
+| Coluna      | Descrição |
+|------------|-----------|
+| C2_OP      | Ordem de produção |
+| C2_QUANT   | Quantidade planejada |
+| C2_QUJE    | Quantidade produzida |
+| C2_PRIOR   | Prioridade da OP |
+| C2_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
--   C2_QUANT = C2_QUJE → finalizada
--   C2_QUANT > C2_QUJE → não finalizada
--   Agrupamento por H8_CTRAB
--   C2_PRIOR = 500
--   H8_DTINI = hoje
--   Filial = 01 ou 02
--   Registros ativos
+---
+
+##### SD4010 — Empenhos / Consumo
+
+| Coluna      | Descrição |
+|------------|-----------|
+| D4_OP      | Ordem de produção |
+| D4_OPERAC  | Operação |
+| D4_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SH8010 — Operações Alocadas
+
+| Coluna      | Descrição |
+|------------|-----------|
+| H8_OP      | Ordem de produção |
+| H8_OPER    | Operação |
+| H8_CTRAB   | Centro de Trabalho |
+| H8_DTINI   | Data de início da operação |
+| H8_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Ordem **finalizada**  
+  - `C2_QUANT = C2_QUJE`
+
+- Ordem **não finalizada**  
+  - `C2_QUANT > C2_QUJE`
+
+- Agrupamento por **Centro de Trabalho**  
+  - `H8_CTRAB`
+
+- Apenas OPs com prioridade **Livre**  
+  - `C2_PRIOR = '500'`
+
+- Data de execução da operação  
+  - `H8_DTINI = :DATA`
+
+- Filiais analisadas  
+  - `:FILIAL` (ex.: 01 ou 02)
+
+- Considerar somente registros ativos  
+  - `SC2010.D_E_L_E_T_ = ''`  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SH8010.D_E_L_E_T_ = ''`
+
+---
 
 #### 💾 Consulta
 
@@ -500,24 +860,97 @@ GROUP BY
 ORDER BY
     OA.H8_CTRAB ASC;
 ```
+---
 
-### 6. Usuário: “Identificar componentes sem empenho registrado (travamento de produção) para um CT específico”
+### 6. Usuário: **“Identificar componentes sem empenho registrado (travamento de produção) para um CT específico”**
+
+
+#### 🎯 Objetivo
+
+Identificar **componentes associados a ordens de produção ativas** que **não possuem empenho registrado** (`D4_QUANT = 0`) em um **Centro de Trabalho (CT) específico**, caracterizando **travamento de produção**.
+
+A consulta permite:
+
+- detectar **bloqueios operacionais** causados por ausência de empenho;
+- identificar **ordens liberadas que não conseguem consumir material**;
+- apoiar ações imediatas de **PCP, almoxarifado e produção**;
+- analisar situações por **filial, CT e data específica**.
+
+---
 
 #### 🧱 Tabelas envolvidas
 
--   SD4010 — Empenhos
--   SH8010 — Operações
--   SB1010 — Produtos
--   SC2010 — Ordens de Produção  
+##### SD4010 — Empenhos de Componentes
 
-⚙️ Condições aplicadas
+| Coluna      | Descrição |
+|------------|-----------|
+| D4_OP      | Ordem de produção |
+| D4_PRODUTO | Código do componente |
+| D4_OPERAC  | Operação da OP |
+| D4_QUANT   | Quantidade empenhada |
+| D4_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
--   D4_QUANT = 0 (sem empenho)
--   H8_CTRAB = CT-19
--   H8_DTINI = hoje
--   C2_PRIOR = 500
--   Filial = 01
--   Registros ativos
+---
+
+##### SC2010 — Ordens de Produção
+
+| Coluna      | Descrição |
+|------------|-----------|
+| C2_OP      | Ordem de produção |
+| C2_PRIOR   | Prioridade da OP |
+| C2_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SH8010 — Operações Alocadas
+
+| Coluna      | Descrição |
+|------------|-----------|
+| H8_OP      | Ordem de produção |
+| H8_OPER    | Operação |
+| H8_CTRAB   | Centro de Trabalho |
+| H8_DTINI   | Data de início da operação |
+| H8_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Componentes **sem empenho registrado**  
+  - `D4_QUANT = 0`
+
+- Centro de Trabalho específico  
+  - `H8_CTRAB = :CT`
+
+- Data de execução da operação  
+  - `H8_DTINI = :DATA`
+
+- Apenas OPs com prioridade **Livre**  
+  - `C2_PRIOR = '500'`
+
+- Filial específica  
+  - `:FILIAL`
+
+- Considerar somente registros ativos  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SC2010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`  
+  - `SH8010.D_E_L_E_T_ = ''`
+
+---
 
 #### 💾 Consulta
 
@@ -552,25 +985,102 @@ WHERE
 ORDER BY
     RE.D4_OP ASC;
 ```
+---
 
-### 7. Usuário: “Identificar ordens finalizadas sem consumo de componentes”
+### 7. Usuário: **“Identificar ordens finalizadas sem consumo de componentes”**
+
+#### 🎯 Objetivo
+
+Identificar **ordens de produção finalizadas** que **não apresentaram consumo de componentes**, caracterizando uma **inconsistência produtiva ou de apontamento**, uma vez que houve produção concluída sem baixa de material.
+
+A consulta permite:
+
+- detectar **falhas de apontamento ou empenho**;
+- identificar **ordens encerradas indevidamente**;
+- apoiar auditorias de **produção, estoque e custos**;
+- isolar casos por **CT, filial e data específica**.
+
+---
 
 #### 🧱 Tabelas envolvidas
 
--   SC2010 — Ordens
--   SD4010 — Empenhos
--   SB1010 — Produtos
--   SH8010 — Operações
+##### SC2010 — Ordens de Produção
 
-⚙️ Condições aplicadas
+| Coluna      | Descrição |
+|------------|-----------|
+| C2_OP      | Número da ordem de produção |
+| C2_PRODUTO | Código do produto produzido |
+| C2_QUANT   | Quantidade planejada |
+| C2_QUJE    | Quantidade efetivamente produzida |
+| C2_PRIOR   | Prioridade da OP |
+| C2_FILIAL  | Filial da OP |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
--   C2_QUANT = C2_QUJE (finalizada)
--   SUM(D4_QUANT) = 0 (sem consumo)
--   H8_CTRAB = CT-19
--   H8_DTINI = hoje
--   C2_PRIOR = 500
--   Filial = 01
--   Registros ativos
+---
+
+##### SD4010 — Empenhos / Consumo de Componentes
+
+| Coluna      | Descrição |
+|------------|-----------|
+| D4_OP      | Ordem de produção |
+| D4_OPERAC  | Operação da OP |
+| D4_COD     | Código do componente |
+| D4_QUANT   | Quantidade consumida |
+| D4_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SH8010 — Operações Alocadas
+
+| Coluna      | Descrição |
+|------------|-----------|
+| H8_OP      | Ordem de produção |
+| H8_OPER    | Operação |
+| H8_CTRAB   | Centro de Trabalho |
+| H8_DTINI   | Data de início da operação |
+| H8_FILIAL  | Filial |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Ordem de produção **finalizada**  
+  - `C2_QUANT = C2_QUJE`
+
+- **Sem consumo de componentes**  
+  - `SUM(D4_QUANT) = 0`
+
+- Centro de Trabalho específico  
+  - `H8_CTRAB = :CT`
+
+- Data de execução da operação  
+  - `H8_DTINI = :DATA`
+
+- Apenas OPs com prioridade **Livre**  
+  - `C2_PRIOR = '500'`
+
+- Filial específica  
+  - `C2_FILIAL = :FILIAL`
+
+- Considerar somente registros ativos  
+  - `SC2010.D_E_L_E_T_ = ''`  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`  
+  - `SH8010.D_E_L_E_T_ = ''`
+
+---
 
 #### 💾 Consulta
 
@@ -620,6 +1130,7 @@ ORDER BY
     OP.C2_OP ASC;
 ```
 
+---
 
 ### 8. Usuário: "Média de tempo por CT (H8_HRINI → H8_HRFIM)"
 
@@ -629,7 +1140,7 @@ ORDER BY
 -   SD4010 — Empenhos
 -   SH8010 — Operações
 
-⚙️ Condições aplicadas
+#### ⚙️ Condições aplicadas
 
 -   Apenas ordens finalizadas (C2_QUANT = C2_QUJE)
 -   Agrupar por H8_CTRAB
@@ -686,23 +1197,69 @@ ORDER BY
 
 > Atenção: as colunas de horas no TOTVS são no formato texto HH:MM por isso é necessário usar o CAST
 
+---
 
-### 9. Usuário: "Estoque total por filial/local, Grupo 1008 Descrição TERM. BANDEIRA"
+### 9. Usuário: **“Estoque total por filial/local, Grupo 1008 – Descrição TERM. BANDEIRA”**
+
+
+#### 🎯 Objetivo
+
+Apurar o **estoque total disponível** de produtos do **grupo 1008 (terminais)** cuja **descrição contenha o texto “TERM. BANDEIRA”**, com os resultados **agrupados por filial e local de estoque**.
+
+A consulta tem como finalidade:
+
+- fornecer uma **visão consolidada de estoque físico**;
+- permitir análise por **filial e local**;
+- apoiar decisões de **produção, abastecimento e balanceamento de estoque**;
+- garantir que apenas **produtos válidos e ativos** sejam considerados.
+
+---
 
 #### 🧱 Tabelas envolvidas
 
--   SD4010 — Empenhos de componentes
--   SH8010 — Operações alocadas
--   SB1010 — Cadastro de produtos
+##### SB2010 — Estoque por Produto / Local
 
-⚙️ Condições aplicadas
+| Coluna      | Descrição |
+|------------|-----------|
+| B2_FILIAL  | Filial do estoque |
+| B2_LOCAL   | Local de armazenagem |
+| B2_COD     | Código do produto |
+| B2_QATU    | Quantidade atual em estoque |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
--   `D4_QUANT` = 0 → componente sem empenho
--   `H8_CTRAB` = 'CT-19' → filtrar por centro de trabalho específico
--   `H8_DTINI` = data atual (20251127)
--   `C2_PRIOR` = 500 → apenas OPs com prioridade livre
--   Filial = 01
--   Registros ativos (`D_E_L_E_T* = '' `)
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| B1_GRUPO   | Grupo do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Considerar somente **produtos ativos**  
+  - `SB1010.D_E_L_E_T_ = ''`
+
+- Considerar somente **saldos de estoque ativos**  
+  - `SB2010.D_E_L_E_T_ = ''`
+
+- Filtrar produtos do **grupo 1008 (terminais)**  
+  - `SB1010.B1_GRUPO = '1008'`
+
+- Filtrar descrição contendo **TERM. BANDEIRA**  
+  - `SB1010.B1_DESC LIKE '%TERM. BANDEIRA%'`
+
+- Consolidação de estoque por:  
+  - Filial (`B2_FILIAL`)  
+  - Local (`B2_LOCAL`)  
+  - Produto (`B2_COD`)
+
+---
 
 #### 💾 Consulta
 
@@ -732,23 +1289,60 @@ INNER JOIN estoque_total T
     ON P.B1_COD = T.B2_COD
 WHERE
     P.D_E_L_E_T_ = ''
+    AND P.B1_GRUPO = '1008'
     AND P.B1_DESC LIKE '%TERM. BANDEIRA%'
-    and P.B1_GRUPO = '1008'
 ORDER BY
     P.B1_COD ASC;
 ```
+---
 
-### 10. Usuário: “Buscar produtos do grupo 1050 com descrição contendo COMP e unidade diferente de peça”
+### 10. Usuário: **“Buscar produtos do grupo 1050 com descrição contendo COMP e unidade diferente de peça”**
+
+---
+
+#### 🎯 Objetivo
+
+Identificar **produtos cadastrados no grupo 1050** cuja **descrição contenha o termo “COMP”** e cuja **unidade de medida seja diferente de peça (PC)**.
+
+A consulta tem como finalidade:
+
+- detectar **inconsistências de cadastro** de unidade de medida;
+- apoiar **saneamento e padronização** do cadastro de produtos;
+- permitir análise objetiva de itens do grupo 1050 que **não seguem o padrão esperado de unidade**.
+
+---
+
 #### 🧱 Tabelas envolvidas
 
--   SB1010 — Cadastro de Produtos (fonte única necessária)
+##### SB1010 — Cadastro de Produtos
 
-⚙️ Condições aplicadas
+> Fonte única necessária para a consulta.
 
--   Grupo do produto = 1050
--   Descrição do produto contém o texto COMP
--   Unidade de medida diferente de peça (PC)
--   Registros ativos (`D_E_L_E_T* = '' `)
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código interno do produto |
+| B1_DESC    | Descrição do produto |
+| B1_GRUPO   | Grupo do produto |
+| B1_UM      | Unidade de medida |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Grupo do produto igual a **1050**  
+  - `B1_GRUPO = '1050'`
+
+- Descrição do produto contendo o texto **COMP**  
+  - `B1_DESC LIKE '%COMP%'`
+
+- Unidade de medida diferente de **peça (PC)**  
+  - `B1_UM <> 'PC'`
+
+- Considerar somente registros ativos  
+  - `SB1010.D_E_L_E_T_ = ''`
+
+---
 
 #### 💾 Consulta
 
@@ -767,23 +1361,48 @@ WHERE
 ORDER BY
     B1_COD;
 ```
+---
 
-### 11. Usuário: “Encontrar produtos com partnumbers duplicados para um fornecedor”
+### 11. Usuário: "Encontrar produtos com partnumbers duplicados para um fornecedor"
+
+#### 🎯 Objetivo
+
+Identificar produtos DELPI distintos que compartilham o mesmo **partnumber do fornecedor**, caracterizando duplicidade no relacionamento Produto × Fornecedor.
+
+---
+
 #### 🧱 Tabelas envolvidas
 
--   SB1010 — Cadastro de Produtos
+##### SB1010 — Cadastro de Produtos
 
--   SA5010 — Relacionamento Produto × Fornecedor (partnumber do fornecedor)
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código interno do produto DELPI |
+| B1_DESC    | Descrição do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica do registro |
 
-⚙️ Condições aplicadas
+##### SA5010 — Relacionamento Produto × Fornecedor
 
--   Fornecedor específico (A5_FORNECE = '001499')
+| Coluna      | Descrição |
+|------------|-----------|
+| A5_PRODUTO | Código do produto DELPI |
+| A5_FORNECE | Código do fornecedor |
+| A5_NOMEFOR | Nome do fornecedor |
+| A5_CODPRF  | Partnumber do produto no fornecedor |
+| D_E_L_E_T_ | Indicador de exclusão lógica do registro |
 
--   Considera somente registros ativos
-    -   `SB1010.D_E_L_E_T_ = ''`
-    -   `SA5010.D_E_L_E_T_ = ''`
--   Identifica partnumbers duplicados por fornecedor
-    -   Mesmo A5_CODPRF associado a mais de um produto
+---
+
+#### ⚙️ Condições aplicadas
+
+- Fornecedor específico (`A5_FORNECE = '001499'`)
+- Considera somente registros ativos  
+  - `SB1010.D_E_L_E_T_ = ''`  
+  - `SA5010.D_E_L_E_T_ = ''`
+- Identificação de partnumbers duplicados  
+  - Mesmo `A5_CODPRF` associado a mais de um produto DELPI
+
+---
 
 #### 💾 Consulta
 
@@ -816,51 +1435,92 @@ ORDER BY
     F.A5_CODPRF,
     P.B1_COD;
 ```
+---
 
-### 11. Usuário: “Buscar a última NF válida de um produto, excluindo transportadoras.”
+### 12. Usuário: **“Buscar a última NF válida de um produto, excluindo transportadoras.”**
+
+#### 🎯 Objetivo
+
+Identificar a **última Nota Fiscal de Entrada válida** de um produto DELPI específico, garantindo que:
+
+- o fornecedor seja **real (não transportadora)**;
+- fornecedores internos previamente mapeados sejam **explicitamente excluídos**;
+- apenas **registros ativos** sejam considerados;
+- o resultado represente **a NF mais recente**, considerando critérios cronológicos consistentes.
+
+O objetivo é obter **um único registro confiável por produto**, representando a última compra válida.
+
+---
+
 #### 🧱 Tabelas envolvidas
 
--   SD1010 — Itens de Notas Fiscais de Entrada
+##### SD1010 — Itens de Notas Fiscais de Entrada
 
--   SA2010 — Cadastro de Fornecedores
+| Coluna        | Descrição |
+|--------------|-----------|
+| D1_FILIAL    | Filial de lançamento da NF |
+| D1_COD       | Código do produto |
+| D1_DOC       | Número da Nota Fiscal |
+| D1_EMISSAO   | Data de emissão da NF |
+| D1_DTDIGIT   | Data de digitação da NF |
+| D1_FORNECE   | Código do fornecedor |
+| D1_LOJA      | Loja do fornecedor |
+| D_E_L_E_T_   | Indicador de exclusão lógica |
 
--   SA5010 — Relacionamento Produto × Fornecedor (partnumber)
+---
 
-⚙️ Condições aplicadas
+##### SA2010 — Cadastro de Fornecedores
 
--   Produto específico
+| Coluna      | Descrição |
+|------------|-----------|
+| A2_COD     | Código do fornecedor |
+| A2_LOJA    | Loja do fornecedor |
+| A2_NOME    | Nome do fornecedor |
+| A2_CGC     | CNPJ do fornecedor |
+| A2_EST     | UF do fornecedor |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
-    -   `SD1010.D1_COD = '10080001'`
+---
 
--   Considera somente registros ativos
+##### SA5010 — Relacionamento Produto × Fornecedor
 
-    -   `SD1010.D_E_L_E_T_ = ''`
+| Coluna      | Descrição |
+|------------|-----------|
+| A5_PRODUTO | Código do produto DELPI |
+| A5_FORNECE | Código do fornecedor |
+| A5_LOJA    | Loja do fornecedor |
+| A5_CODPRF  | Partnumber do produto no fornecedor |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
-    -   `SA2010.D_E_L_E_T_ = ''`
+---
 
-    -   `SA5010.D_E_L_E_T_ = ''`
+#### ⚙️ Condições aplicadas
 
--   Exclui fornecedores internos específicos
+- Produto específico analisado  
+  - `SD1010.D1_COD = '10080001'`
 
-    -   `D1_FORNECE <> '000019'`
+- Considerar somente registros ativos  
+  - `SD1010.D_E_L_E_T_ = ''`  
+  - `SA2010.D_E_L_E_T_ = ''`  
+  - `SA5010.D_E_L_E_T_ = ''`
 
-    -   `D1_FORNECE <> '001149'`
+- Exclusão de fornecedores internos específicos  
+  - `D1_FORNECE <> '000019'`  
+  - `D1_FORNECE <> '001149'`
 
--   Exclui transportadoras pelo nome do fornecedor
+- Exclusão de transportadoras  
+  - Fornecedor cujo nome contenha “TRANSP” é descartado  
+  - `UPPER(SA2010.A2_NOME) NOT LIKE '%TRANSP%'`
 
-    -   `UPPER(SA2010.A2_NOME) NOT LIKE '%TRANSP%'`
+- Determinação da última NF válida por produto  
+  - Critério de ordenação hierárquico:
+    1. Data de emissão (`D1_EMISSAO`)
+    2. Data de digitação (`D1_DTDIGIT`)
+    3. Número da NF (`D1_DOC`)
+  - Uso de `ROW_NUMBER()` particionado por produto
+  - Seleção apenas do registro mais recente (`RN = 1`)
 
--   Determina a última NF por produto
-
-    -   Ordenação por:
-
-        -   Data de emissão
-
-        -   Data de digitação
-
-        -   Número da NF
-
-    -   Uso de `ROW_NUMBER()` para selecionar apenas o registro mais recente (`RN = 1`)
+---
 
 #### 💾 Consulta
 
@@ -918,63 +1578,103 @@ FROM ULTIMA_NF_PRODUTO
 WHERE RN = 1
 ORDER BY COD_MATERIA_PRIMA;
 ```
+---
 
-### 12. Usuário: “Identificar a quantidade consumida de terminais por CT, agrupada por filial”
+### 13. Usuário: **“Identificar a quantidade consumida de terminais por CT, agrupada por filial”**
 
-#### 🎯 Objetivo da consulta
+#### 🎯 Objetivo
 
-Identificar a **quantidade efetivamente consumida de terminais (grupo 1008)** em um **Centro de Trabalho específico (CT)**, com **produção real comprovada**, **agrupando os resultados por filial**, dentro de um **período definido**.
+Identificar a **quantidade efetivamente consumida de terminais (grupo 1008)** em um **Centro de Trabalho (CT) específico**, considerando **apenas produção real comprovada**, com os resultados **agrupados por filial**, dentro de um **período definido**.
 
 A consulta garante que:
 
-- O consumo considerado é **real**, não apenas planejado  
-- O CT é validado por **apontamento efetivo de produção**  
-- As quantidades **não são infladas** por múltiplos apontamentos  
-- Os resultados são **comparáveis entre filiais**
+- o consumo apurado é **real**, não apenas planejado;
+- o CT é validado por **apontamento efetivo de produção**;
+- as quantidades **não são infladas** por múltiplos apontamentos;
+- os resultados são **comparáveis entre filiais**.
 
 ---
 
 #### 🧱 Tabelas envolvidas
 
-- **SD4010** — Empenhos / Consumo de materiais na OP  
-- **SB1010** — Cadastro de produtos (terminais)  
-- **SH6010** — Apontamentos de produção (execução real)
+##### SD4010 — Empenhos / Consumo de Materiais
+
+| Coluna        | Descrição |
+|--------------|-----------|
+| D4_FILIAL    | Filial da ordem de produção |
+| D4_OP        | Número da OP |
+| D4_OPERAC    | Operação da OP |
+| D4_COD       | Código do material consumido |
+| D4_QTDEORI   | Quantidade originalmente empenhada |
+| D4_QUANT     | Quantidade efetivamente baixada |
+| D_E_L_E_T_   | Indicador de exclusão lógica |
 
 ---
 
-⚙️ Condições aplicadas
+##### SB1010 — Cadastro de Produtos
 
-- **B1_GRUPO = '1008'**  
-  → Apenas **terminais**
-
-- **H6_TIPO = 'P'**  
-  → Apenas apontamentos de produção válidos
-
-- **H6_RECURSO = CT informado**  
-  → CT inferido a partir do recurso apontado na produção
-
-- **Período de execução real**  
-  → `H6_DATAINI BETWEEN DataInicial AND DataFinal`  
-  *(formato `YYYYMMDD`)*
-
-- **Agrupamento por filial**  
-  → `SD4.D4_FILIAL`
-
-- **Somente registros ativos**  
-  → `D_E_L_E_T_ = ''`
-
-- **Validação de execução real por operação**  
-  → Uso de `EXISTS (SH6010)` para garantir que **cada linha da SD4010 só é considerada se a operação teve produção real no CT e no período**
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| B1_GRUPO   | Grupo do produto |
+| B1_UM      | Unidade de medida |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
 
 ---
 
-📐 Regra de cálculo da quantidade consumida
+##### SH6010 — Apontamentos de Produção
 
-A quantidade consumida é calculada **exclusivamente a partir da SD4010**, utilizando o **mesmo critério da query consolidada de golpes**:
+| Coluna        | Descrição |
+|--------------|-----------|
+| H6_FILIAL    | Filial do apontamento |
+| H6_OP        | Ordem de produção |
+| H6_OPERAC   | Operação apontada |
+| H6_RECURSO  | Recurso / Centro de Trabalho |
+| H6_TIPO     | Tipo de apontamento (P = Produção) |
+| H6_DATAINI  | Data de início da execução |
+| D_E_L_E_T_  | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Considerar apenas **terminais**  
+  - `SB1010.B1_GRUPO = '1008'`
+
+- Validar apenas **produção real**  
+  - `SH6010.H6_TIPO = 'P'`
+
+- Centro de Trabalho específico  
+  - `SH6010.H6_RECURSO = 'CT-53'`
+
+- Período de execução real  
+  - `SH6010.H6_DATAINI BETWEEN '20250101' AND '20251231'`
+
+- Agrupamento por filial  
+  - `SD4010.D4_FILIAL`
+
+- Considerar somente registros ativos  
+  - `SD4010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`  
+  - `SH6010.D_E_L_E_T_ = ''`
+
+- Validação de execução real por operação  
+  - Uso de `EXISTS (SH6010)` para garantir que **cada linha da SD4010 só é considerada se a operação teve produção real no CT e no período informado**
+
+---
+
+#### 📐 Regra de cálculo da quantidade consumida
+
+A quantidade consumida é calculada **exclusivamente a partir da SD4010**, utilizando o critério:
 
 ```text
 D4_QTDEORI - D4_QUANT
 ```
+
+Somente valores positivos são considerados, evitando consumo inflado ou registros inconsistentes.
+
+---
 
 #### 💾 Consulta
 
@@ -1022,222 +1722,150 @@ ORDER BY
     SD4.D4_COD;
 ```
 
-### 13. Tempo médio real de consumo por terminal (CT específico, sem duplicidade de tempo)
+### 14. Usuário: **“Tempo médio real de consumo por terminal (CT específico, sem duplicidade de tempo)”**
+
+---
 
 #### 🎯 Objetivo
 
-Calcular, para cada **terminal elétrico**, o **tempo médio real de consumo por peça**, considerando:
+Calcular, para cada **terminal elétrico**, o **tempo médio real de consumo por peça**, utilizando **dados reais de produção**, considerando:
 
-- Apenas **apontamentos de produção** (`H6_TIPO = 'P'`)
-- Um **Centro de Trabalho específico** (`CT-53`)
-- Uma **faixa de datas definida**
-- **Quantidade real consumida** do terminal
-- **Eliminação de duplicidade de tempo**, consolidando todos os apontamentos de uma mesma **OP + operação**
+- apenas **apontamentos de produção válidos** (`H6_TIPO = 'P'`);
+- um **Centro de Trabalho (CT) específico**;
+- uma **faixa de datas definida**;
+- a **quantidade real consumida** de cada terminal;
+- a **eliminação de duplicidade de tempo**, consolidando todos os apontamentos pertencentes à mesma **OP + operação**.
 
-O resultado é um indicador **ponderado pelo volume**, tecnicamente consistente e validado com dados reais do Protheus.
+O resultado é um indicador **ponderado pelo volume real produzido**, tecnicamente consistente, adequado para análise de desempenho produtivo e engenharia de tempos.
 
-
+---
 
 #### 🧱 Tabelas envolvidas
 
-- **SH6010** — Apontamentos de produção (tempo, CT, OP, operação)
-- **SD4010** — Consumo de materiais por OP e operação
-- **SB1010** — Cadastro de produtos (classificação dos terminais)
+##### SH6010 — Apontamentos de Produção
 
+| Coluna        | Descrição |
+|--------------|-----------|
+| H6_FILIAL    | Filial do apontamento |
+| H6_OP        | Ordem de produção |
+| H6_OPERAC   | Operação da OP |
+| H6_RECURSO  | Recurso / Centro de Trabalho |
+| H6_TIPO     | Tipo de apontamento (P = Produção) |
+| H6_DATAINI  | Data de início da execução |
+| H6_DATAFIN  | Data de término da execução |
+| H6_HORAINI  | Hora de início |
+| H6_HORAFIN  | Hora de término |
+| D_E_L_E_T_  | Indicador de exclusão lógica |
 
+---
+
+##### SD4010 — Consumo de Materiais
+
+| Coluna        | Descrição |
+|--------------|-----------|
+| D4_FILIAL    | Filial da OP |
+| D4_OP        | Ordem de produção |
+| D4_OPERAC   | Operação da OP |
+| D4_COD       | Código do material consumido |
+| D4_QTDEORI  | Quantidade originalmente empenhada |
+| D4_QUANT    | Quantidade efetivamente baixada |
+| D_E_L_E_T_  | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| B1_GRUPO   | Grupo do produto |
+| B1_UM      | Unidade de medida |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
 
 #### ⚙️ Condições aplicadas
 
--   SH6010 — Apontamentos de Produção
+- **SH6010 — Apontamentos de Produção**
+  - Somente registros ativos: `D_E_L_E_T_ = ''`
+  - Apenas produção real: `H6_TIPO = 'P'`
+  - Centro de Trabalho específico: `H6_RECURSO = :CT`
+  - Período de execução real: `H6_DATAINI BETWEEN :DATA_INICIO AND :DATA_FIM`
+  - Apontamentos completos:
+    - `H6_DATAFIN IS NOT NULL`
+    - `H6_HORAINI <> ''`
+    - `H6_HORAFIN <> ''`
+  - **Consolidação do tempo** por:
+    - Filial
+    - OP
+    - Operação
+    - CT
 
-    -   Apenas registros ativos  
-    -   `D_E_L_E_T_ = ''`
-    -   Somente produção  
-    -   `H6_TIPO = 'P'`
-    -   Centro de trabalho específico  
-    -   `H6_RECURSO = 'CT-53'`
-    -   Faixa de datas  
-    -   `H6_DATAINI BETWEEN '20250101' AND '20251231'`
-    -   Apontamentos completos  
-    -   `H6_DATAFIN IS NOT NULL`
-    -   `H6_HORAINI <> ''`
-    -   `H6_HORAFIN <> ''`
-    -   **Consolidação do tempo** por:
-    -   Filial
-    -   OP
-    -   Operação
-    -   CT
+- **SD4010 — Consumo de Terminais**
+  - Somente registros ativos: `D_E_L_E_T_ = ''`
+  - Quantidade real consumida calculada como:
+    - `D4_QTDEORI - D4_QUANT` (quando positiva)
+  - Agrupamento por:
+    - Filial
+    - OP
+    - Operação
+    - Código do material
 
-
-- SD4010 — Consumo de Terminais
-    - Apenas registros ativos  
-        - `D_E_L_E_T_ = ''`
-    - Quantidade real consumida calculada como:  
-        - `QTDEORI - QUANT` (quando positiva)
-    - Agrupamento por:
-        - Filial
-        - OP
-        - Operação
-        - Código do material
-
--   SB1010 — Cadastro de Produto
-    - Apenas registros ativos  
-        - `D_E_L_E_T_ = ''`
-    - Apenas **terminais**  
-        - `B1_GRUPO = '1008'`
+- **SB1010 — Cadastro de Produto**
+  - Somente registros ativos: `D_E_L_E_T_ = ''`
+  - Apenas terminais: `B1_GRUPO = :GRUPO`
 
 ---
 
 #### 🧮 Equações envolvidas
 
--   ⏱️ Tempo total por OP + operação
+- **⏱️ Tempo total consolidado por OP + operação**
+
 Para cada OP \(i\) e operação \(j\):
+
 \[
-T_{i,j} =
-\sum
-\left(
-\text{DataHoraFim}_{i,j} -
-\text{DataHoraInicio}_{i,j}
-\right)
+T_{i,j} = \sum (DataHoraFim_{i,j} - DataHoraInicio_{i,j})
 \]
-> A soma elimina a duplicidade causada por múltiplos apontamentos na SH6010.
 
+> A soma elimina duplicidades causadas por múltiplos apontamentos na SH6010.
 
--   📦 Quantidade real consumida do terminal
+---
+
+- **📦 Quantidade real consumida do terminal**
+
 Para cada terminal \(t\), OP \(i\) e operação \(j\):
+
 \[
-Q_{i,j,t} =
-\sum
+Q_{i,j,t} = \sum
 \begin{cases}
 D4\_QTDEORI - D4\_QUANT, & \text{se } D4\_QTDEORI > D4\_QUANT \\
 0, & \text{caso contrário}
 \end{cases}
 \]
 
-
+---
 
 #### ⏱️ Tempo médio real por terminal (ponderado)
 
 Para cada terminal \(t\):
+
 \[
 \boxed{
-TempoMédio_t =
-\frac{\sum T_{i,j}}{\sum Q_{i,j,t}}
+TempoMédio_t = \frac{\sum T_{i,j}}{\sum Q_{i,j,t}}
 }
 \]
-- Unidade: **segundos por peça**
-- O tempo é **ponderado pelo volume real consumido**
-- Não é média simples por OP
 
+- Unidade: **segundos por peça**
+- Tempo **ponderado pelo volume real consumido**
+- Não se trata de média simples por OP
+
+---
 
 #### 💾 Consulta
 
 ```sql
-WITH SH6_CONSOLIDADO AS (
-    SELECT
-        H6_FILIAL,
-        H6_OP,
-        H6_OPERAC,
-        H6_RECURSO,
-
-        -- Tempo TOTAL por OP + operação (elimina duplicidade)
-        SUM(
-            DATEDIFF(
-                SECOND,
-                CAST(CONVERT(char(8), H6_DATAINI, 112) + ' ' + H6_HORAINI AS datetime),
-                CAST(CONVERT(char(8), H6_DATAFIN, 112) + ' ' + H6_HORAFIN AS datetime)
-            )
-        ) AS TEMPO_OP_SEG
-    FROM SH6010
-    WHERE
-        D_E_L_E_T_ = ''
-        AND H6_TIPO = 'P'
-        AND H6_RECURSO = 'CT-53'
-        AND H6_DATAINI BETWEEN '20250101' AND '20251231'
-        AND H6_DATAFIN IS NOT NULL
-        AND H6_HORAINI <> ''
-        AND H6_HORAFIN <> ''
-    GROUP BY
-        H6_FILIAL,
-        H6_OP,
-        H6_OPERAC,
-        H6_RECURSO
-),
-
-CONSUMO AS (
-    SELECT
-        SD4.D4_FILIAL,
-        SD4.D4_OP,
-        SD4.D4_OPERAC,
-        SD4.D4_COD,
-
-        -- Quantidade REAL consumida do terminal
-        SUM(
-            CASE
-                WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
-                THEN SD4.D4_QTDEORI - SD4.D4_QUANT
-                ELSE 0
-            END
-        ) AS QTD_CONSUMIDA
-    FROM SD4010 SD4
-    WHERE
-        SD4.D_E_L_E_T_ = ''
-    GROUP BY
-        SD4.D4_FILIAL,
-        SD4.D4_OP,
-        SD4.D4_OPERAC,
-        SD4.D4_COD
-)
-
-SELECT
-    SH6.H6_FILIAL        AS FILIAL,
-    SB1.B1_COD           AS COD_TERMINAL,
-    SB1.B1_DESC          AS DESC_TERMINAL,
-    SB1.B1_UM            AS UM,
-    SH6.H6_RECURSO       AS CT,
-
-    -- Quantidade total REAL no período / CT
-    SUM(C.QTD_CONSUMIDA) AS QTD_TOTAL_TERMINAL,
-
-    -- Tempo total REAL (sem duplicidade)
-    SUM(SH6.TEMPO_OP_SEG) AS TEMPO_TOTAL_SEG,
-
-    -- Tempo médio REAL por peça (ponderado)
-    SUM(SH6.TEMPO_OP_SEG) * 1.0
-    / NULLIF(SUM(C.QTD_CONSUMIDA), 0)
-    AS TEMPO_MEDIO_SEG_POR_PECA
-
-FROM SH6_CONSOLIDADO SH6
-
-INNER JOIN CONSUMO C
-    ON C.D4_FILIAL = SH6.H6_FILIAL
-   AND C.D4_OP     = SH6.H6_OP
-   AND C.D4_OPERAC = SH6.H6_OPERAC
-
-INNER JOIN SB1010 SB1
-    ON SB1.B1_COD   = C.D4_COD
-   AND SB1.B1_GRUPO = '1008'
-   AND SB1.D_E_L_E_T_ = ''
-
-WHERE
-    C.QTD_CONSUMIDA > 0
-
-GROUP BY
-    SH6.H6_FILIAL,
-    SB1.B1_COD,
-    SB1.B1_DESC,
-    SB1.B1_UM,
-    SH6.H6_RECURSO
-
-ORDER BY
-    SH6.H6_FILIAL,
-    TEMPO_MEDIO_SEG_POR_PECA;
-```
-
-### TESTE ESSE SQL, É SÓ VC ALTERAR AS VARIAVEIS DO COMEÇO:
-```sql
-
---  CALCULAR A QUANTIDADE CONSUMIDA DE TERMINAL E O TEMPO MÉDIO POR TERMINAL
+--  CALCULAR A QUANTIDADE CONSUMIDA DE MATÉRIA PRIMA E O TEMPO MÉDIO POR UNIDADE
 DECLARE @CT VARCHAR(20);
 DECLARE @GRUPO VARCHAR(20);
 DECLARE @DATA_INICIO VARCHAR(20);

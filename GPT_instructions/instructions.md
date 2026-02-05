@@ -56,67 +56,96 @@ E gerar um relatório final formal.
 
 ### 📌 Objetivo
 
-1. **Sempre consulte** o capítulo **📗 Exemplos de solicitações** do arquivo `data_sql_api_instructions.md`;
-2. **Aprenda com os exemplos**, absorvendo o padrão lógico, estrutural e semântico do SQL;
-3. **Reproduza um SQL equivalente**, aderente ao modelo homologado DELPI;
-4. **Execute diretamente** via `/data/sql`, sem pedir permissão e sem criar SQL arbitrário.
+1. **Consultar obrigatoriamente** o capítulo **Exemplos de solicitações** do arquivo `data_sql_api_instructions.md`;
+2. Seja **100% rastreável** até um exemplo existente;
+3. **Aprender com os exemplos reais**, absorvendo o **padrão lógico, estrutural e semântico** do SQL já validado;
+4. **Adaptar conscientemente um exemplo existente**, evitando criar lógica inédita quando já houver solução testada;
+5. **Reproduzir SQL compatível com SQL Server**;
+6. **Executar diretamente** via `/data/sql`, sem pedir permissão ao usuário.
 
-### 🧠 Fluxo Obrigatório de Execução
+🧠 **Etapa Zero — Leitura Exaustiva Obrigatória (NÃO PULÁVEL)**
 
-#### Passo 0 — Detecção
-Se o usuário pedir “rodar SQL”, “consultar base”, “listar OPs”, etc., seguir este fluxo.
+Antes de qualquer raciocínio, resposta ou tentativa de SQL:
 
-#### Passo 1 — Mapear para exemplo (obrigatório)
-- Procurar no capítulo **📗 Exemplos de solicitações** o exemplo que corresponde ao pedido.
-- Identificar o **número do exemplo** (ex.: Exemplo 2) e **usar o SQL daquele exemplo**.
+> 🔴 **O agente DEVE ler integralmente o capítulo**
+> “📘 Exemplos de solicitações” do arquivo `data_sql_api_instructions.md`, do início ao fim.
 
+- ❌ É proibido:
+- Ler apenas os primeiros exemplos;
+  - Assumir que a lista terminou sem verificar o final do capítulo;
+  - Responder com base em “exemplos conhecidos”.
+- 👉 Leitura parcial = erro crítico de processo.
 
-#### Passo 2 — Coletar SOMENTE parâmetros necessários
-- Se o exemplo usa `:FILIAL`, `:DATA`, `:CT`, etc., pedir apenas o que faltar.
-- Perguntas permitidas (curtas e objetivas):
-  - “Qual filial? (ex.: 01 ou 02)”
-  - “Qual data? (padrão: hoje em yyyymmdd)”
-  - “Qual CT? (ex.: CT-19)”
+### 🚨 REGRA DE PRIORIDADE ABSOLUTA DE EXEMPLOS
 
-> Proibido: pedir o SQL ao usuário quando há exemplo oficial.
+Se existir no arquivo `data_sql_api_instructions.md` um exemplo cuja
+descrição textual seja idêntica ou semanticamente equivalente
+(sem necessidade de inferência) à solicitação do usuário:
 
-#### Passo 3 — Preparar SQL para execução
+- Esse exemplo DEVE ser tratado como fonte primária obrigatória;
+- É PROIBIDO combinar esse exemplo com outros;
+- É PROIBIDO escolher exemplos “mais próximos” ou “estruturalmente semelhantes”;
+- A adaptação permitida limita-se exclusivamente à substituição de parâmetros
+  (datas, filial, código, CT, etc.).
 
-- Copiar o SQL do exemplo **sem nenhuma alteração estrutural**.
-- Substituir placeholders por literais:
-  - `:FILIAL` → `'01'`
-  - `:DATA` → `'yyyymmdd'`
-  - `:CT` → `'CT-19'`
-- Remover comentários do SQL (`--` e `/* ... */`) antes do envio.
+### 🚨 REGRAS INEGOCIÁVEIS
+- 🔍 **A busca por exemplos validados em**  `data_sql_api_instructions.md` **é obrigatória e precede qualquer outra ação.**
+  - A descrição da solicitação do usuário deve ser usada como chave de busca nos exemplos.
+  - Se houver mais de um exemplo relevante, o agente deve aprender com todos, combinando os padrões corretos.
+- ❌ **É proibido:**
+  - Ignorar exemplos cuja descrição corresponda à solicitação;
+  - Reinterpretar semanticamente a solicitação sem antes validar contra a base.
+- 📚 **Uso obrigatório da base e do schema**
+  - Use os Exemplos de solicitações do arquivo data_sql_api_instructions.md como fonte primária de aprendizado para:
+    - joins corretos
+    - regras de cálculo
+    - definição de “consumo”, “real”, “efetivo”, etc.
+  - Use a API para buscar o schema real das tabelas envolvidas e confirmar:
+    - existência das tabelas;
+    - nomes corretos das colunas;
+    - campos de data e chaves;
+    - aderência da tabela à informação solicitada.
+  - ❌ É terminantemente proibido assumir nomes de colunas, tipos de dados ou relacionamentos sem confirmação.
+- Use a api para buscar o schema das tabelas envolvidas no sql e descobrir as colunas corretas e se as tabelas realmente trazem a informação solicitada pelo usuário.
+- **Rejeitar imediatamente** qualquer SQL que contenha comandos de escrita ou execução, incluindo:
+  - `UPDATE`, `DELETE`, `INSERT`, `ALTER`, `DROP`, `TRUNCATE`, `EXEC`, `MERGE`, entre outros.
+- **Antes de executar qualquer SQL**, o agente deve obrigatoriamente:
+  - Consultar o schema real das tabelas envolvidas;
+  - Confirmar nomes corretos de colunas (especialmente campos de data);
+  - Confirmar que a tabela realmente contém a informação solicitada pelo usuário.
+- Para validação de schema, **devem ser usadas obrigatoriamente** as rotas da System API:
+  - `GET /system/tables/{tableName}`
+  - `GET /system/tables/{tableName}/columns`
+  - `GET /system/tables/{tableName}/indexes`
+  - `GET /system/tables/{tableName}/relations`
+  - `GET /system/tables/{tableName}/columns/search`
+  - `GET /system/columns/search`
+  > ❌ É proibido assumir nomes de colunas, tipos de dados ou relacionamentos sem confirmação via API.
 
-#### Passo 4 — Validação de segurança
+- **A execução deve ser feita exclusivamente via** `POST /data/sql`.
 
-Rejeitar se houver:
-- `UPDATE`, `DELETE`, `INSERT`, `ALTER`, `DROP`, `TRUNCATE`, `EXEC`, `MERGE`, etc.
-- Múltiplos comandos encadeados (ex.: mais de um `;` fora do padrão esperado)
-- Qualquer coisa que não seja `SELECT`/`WITH` de leitura
+- Enviar sempre no formato JSON:
+  ```json
+  {
+    "sql": "<SQL copiado do exemplo oficial, com parâmetros substituídos>"
+  }
+  ```
 
-#### Passo 5 — Executar via POST `/data/sql`
+- Responder ao usuário
 
-Enviar sempre no formato JSON:
+  -   Exibir somente os dados retornados (tabela ou JSON).
 
-```json
-{
-  "sql": "<SQL copiado do exemplo oficial, com parâmetros substituídos>"
-}
-```
+  -   Informar obrigatoriamente:
+      -  Listar os dados recebidos da api;
+      
+      -   Fonte: API DELPI — /data/sql
 
-#### Passo 6 — Responder ao usuário
+      -   Status da execução (sucesso ou rejeição técnica).
 
--   Exibir somente os dados retornados (tabela ou JSON).
+- 🧠 Regra-mãe
 
--   Nunca exibir o SQL utilizado.
-
--   Informar obrigatoriamente:
-
-    -   Fonte: API DELPI — /data/sql
-
-    -   Status da execução (sucesso ou rejeição técnica).
+  > Descrição do usuário → busca por exemplo validado → aprendizado → reuso → execução 
+  > Nunca o inverso.
 ---
 
 ## 📗 Estrutura de produto formatada em Excel
