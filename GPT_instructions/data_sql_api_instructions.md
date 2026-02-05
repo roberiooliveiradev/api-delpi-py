@@ -1132,7 +1132,7 @@ ORDER BY
 
 ---
 
-### 8. Usuário: "Média de tempo por CT (H8_HRINI → H8_HRFIM)"
+### 8. Usuário: **"Média de tempo por CT (H8_HRINI → H8_HRFIM)"**
 
 #### 🧱 Tabelas envolvidas
 
@@ -1363,7 +1363,7 @@ ORDER BY
 ```
 ---
 
-### 11. Usuário: "Encontrar produtos com partnumbers duplicados para um fornecedor"
+### 11. Usuário: **"Encontrar produtos com partnumbers duplicados para um fornecedor"**
 
 #### 🎯 Objetivo
 
