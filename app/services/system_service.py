@@ -103,6 +103,47 @@ def search_columns_in_table(tableName: str, text: str):
     log_info(f"Service: buscando colunas da tabela {tableName} contendo '{text}'")
     return repo.search_columns(tableName, text)
 
+def search_columns_by_description(description: str, page: int = 1, limit: int = 20) -> dict:
+    """
+    Busca colunas em todas as tabelas do Protheus pela descrição semântica (SX3010),
+    retornando tabela, coluna e score de similaridade.
+    """
+    repo = SystemRepository()
+    log_info(
+        f"Service: buscando colunas por descrição semelhante a '{description}' "
+        f"(página {page}, limite {limit})"
+    )
+
+    try:
+        result = repo.search_columns_by_description(
+            description=description,
+            page=page,
+            page_size=limit
+        )
+
+        if not result or not result.get("data"):
+            raise BusinessLogicError(
+                f"Nenhuma coluna encontrada para a descrição '{description}'."
+            )
+
+        return {
+            "success": True,
+            "message": f"{len(result['data'])} colunas encontradas para '{description}'",
+            "page": result.get("page", page),
+            "page_size": result.get("page_size", limit),
+            "total_records": result.get("total_records", 0),
+            "total_pages": result.get("total_pages", 1),
+            "results": result["data"]
+        }
+
+    except BusinessLogicError as e:
+        log_error(str(e))
+        raise
+    except Exception as e:
+        log_error(
+            f"Erro inesperado ao buscar colunas por descrição '{description}': {e}"
+        )
+        raise DatabaseConnectionError(str(e))
 
 def get_table_schema(tableName: str):
     repo = SystemRepository()

@@ -8,6 +8,7 @@ from app.services.system_service import (
     get_table_schema,
     search_columns_in_table,
     search_table_by_description, 
+    search_columns_by_description,
 )
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError, BusinessLogicError
@@ -161,6 +162,53 @@ def search_columns(tableName: str, q: str = Query(..., min_length=2)):
         return success_response(result, f"Colunas contendo '{q}' retornadas!")
     except Exception as e:
         return error_response(str(e))
+
+# ----------------------------
+# 🔍 6️⃣ Busca global de colunas por descrição
+# ----------------------------
+@router.get(
+    "/columns/search",
+    summary="Busca colunas por descrição (SX3010 + ranking semântico)"
+)
+def search_columns_global(
+    description: str = Query(
+        ...,
+        min_length=2,
+        description="Texto descritivo da coluna (ex: 'Amarração produto fornecedor')"
+    ),
+    page: int = Query(1, ge=1, description="Número da página"),
+    limit: int = Query(20, ge=1, le=200, description="Quantidade de registros por página")
+):
+    """
+    Busca colunas em todas as tabelas do Protheus com base na descrição,
+    utilizando ranking de similaridade textual.
+    """
+    log_info(
+        f"Iniciando busca global de colunas por descrição '{description}' "
+        f"(página {page}, limite {limit})"
+    )
+
+    try:
+        result = search_columns_by_description(
+            description=description,
+            page=page,
+            limit=limit
+        )
+
+        return success_response(
+            data=result,
+            message="Busca de colunas realizada com sucesso!"
+        )
+
+    except BusinessLogicError as e:
+        log_error(f"Nenhuma coluna encontrada: {e}")
+        return error_response(str(e))
+    except DatabaseConnectionError as e:
+        log_error(f"Erro de conexão ao buscar colunas: {e}")
+        return error_response(f"Erro de conexão com o banco de dados: {e}")
+    except Exception as e:
+        log_error(f"Erro inesperado ao buscar colunas: {e}")
+        return error_response(f"Erro inesperado: {e}")
 
 # ----------------------------
 # 🔐 5️⃣ Login simples
