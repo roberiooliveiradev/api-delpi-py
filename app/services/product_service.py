@@ -32,23 +32,6 @@ def get_product(code: str) -> Product:
         raise DatabaseConnectionError(str(e))
 
 
-
-def get_products(limit: int = 10) -> list[Product]:
-    """
-    Lista produtos do Protheus com limite definido.
-    Retorna uma lista de modelos Product.
-    """
-    repo = ProductRepository()
-    log_info(f"Listando até {limit} produtos do Protheus...")
-    try:
-        results = repo.list_products(limit)
-        # Converte cada linha retornada em um objeto Product
-        products = [Product(**r) for r in results]
-        return products
-    except Exception as e:
-        log_error(f"Erro ao listar produtos: {e}")
-        raise DatabaseConnectionError(str(e))
-
 def search_products_by_description(
     description: str,
     page: int = 1,
@@ -61,22 +44,6 @@ def search_products_by_description(
     except Exception as e:
         log_error(f"Erro ao pesquisar produtos por descrição: {e}")
         raise DatabaseConnectionError(str(e))
-
-def search_products(
-    page: int = 1,
-    page_size: int = 50,
-    code: Optional[str] = None,
-    description: Optional[str] = None,
-    group: Optional[str] = None
-) -> dict:
-    repo = ProductRepository()
-    log_info(f"Buscando produtos (page={page}) com filtros aplicados")
-    try:
-        return repo.search_products(page, page_size, code, description, group)
-    except Exception as e:
-        log_error(f"Erro ao pesquisar produtos: {e}")
-        raise DatabaseConnectionError(str(e))
-
 
 def get_structure(code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
     repo = ProductRepository()
@@ -182,7 +149,7 @@ def get_inspection(
     log_info(f"Buscando inspeções de processo para {code} (página {page})")
 
     try:
-        return repo.list_inspection(code, page, page_size, max_depth)
+        return repo.list_inspection_definition(code, max_depth)
     except Exception as e:
         log_error(f"Erro ao listar inspeções para {code}: {e}")
         raise DatabaseConnectionError(str(e))

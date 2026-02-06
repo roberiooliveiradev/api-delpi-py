@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_products, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers, get_structure_excel
-from app.services.product_service import get_suppliers, get_inbound_invoice_items
-from app.services.product_service import get_outbound_invoice_items, get_stock, search_products, search_products_by_description
+from app.services.product_service import get_product, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers, get_structure_excel
+from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products_by_description
 from app.services.product_service import get_purchases, get_sales_summary, get_sales_open_orders, get_sales_billing, get_product_pricing
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
@@ -16,21 +15,7 @@ from fastapi import Request
 
 router = APIRouter()
 
-# @router.get("/", summary="Listagem de produtos com limite")
-def products(limit: int = Query(50, ge=1, le=200)):
-    """
-    Retorna uma lista de produtos com limite opcional (padrão = 10).
-    """
-    try:
-        products = get_products(limit)
-        return success_response(
-            data={"total": len(products), "produtos": [p.model_dump(by_alias=True) for p in products]},
-            message="Listagem realizada com sucesso!"
-        )
-    except Exception as e:
-        log_error(f"Erro ao listar produtos: {e}")
-        return error_response(f"Erro inesperado: {e}")
-    
+
 @router.get(
     "/search/description",
     summary="Busca específica por descrição, com paginação e score"
@@ -50,25 +35,6 @@ def search_products_by_description_route(
         log_error(f"Erro na busca pela descrição: {e}")
         return error_response(f"Erro inesperado: {e}")
 
-
-# @router.post("/search", summary="Pesquisa de produtos via POST, com filtros e paginação")
-def search_products_post_route(body: ProductSearchRequest):
-    try:
-        result = search_products(
-            body.page,
-            body.page_size,
-            body.code,
-            body.description,
-            body.group
-        )
-        return success_response(
-            data=result,
-            message=f"Pesquisa de produtos realizada com sucesso (página {body.page}/{result['totalPages']})."
-        )
-    except Exception as e:
-        log_error(f"Erro ao pesquisar produtos: {e}")
-        return error_response(f"Erro inesperado: {e}")
-    
 
 @router.get("/{code}", summary="Consulta produto por código")
 def product(code: str):
@@ -104,6 +70,7 @@ def structure(
     except Exception as e:
         log_error(f"Erro ao consultar estrutura do produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
 
 @router.get(
     "/{code}/structure/excel",
@@ -157,6 +124,7 @@ async def structure_excel_public(
         log_error(f"Erro ao gerar planilha Excel pública de {code}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+
 @router.get("/{code}/parents", summary="Consulta produtos pai (Where Used) paginada via CTE")
 def parents(
     code: str,
@@ -177,6 +145,7 @@ def parents(
         log_error(f"Erro ao consultar pais do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
+
 @router.get("/{code}/suppliers", summary="Consulta os fornecedores de um produto com paginação")
 def suppliers(
     code: str,
@@ -195,6 +164,7 @@ def suppliers(
     except Exception as e:
         log_error(f"Erro ao consultar fornecedores do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
 
 @router.get("/{code}/inbound-invoice-items", summary="Consulta as notas fiscais de entrada (paginadas e filtráveis)")
 def inbound_invoice_items(
@@ -219,6 +189,7 @@ def inbound_invoice_items(
         log_error(f"Erro ao consultar NF-es de entrada para {code}: {e}")
         return error_response(f"Unexpected error: {e}")
 
+
 @router.get("/{code}/outbound-invoice-items", summary="Consulta as notas fiscais de saída (paginadas e filtráveis)")
 def outbound_invoice_items(
     code: str,
@@ -242,6 +213,7 @@ def outbound_invoice_items(
         log_error(f"Erro ao consultar NF-es de saída para {code}: {e}")
         return error_response(f"Unexpected error: {e}")
 
+
 @router.get(
     "/{code}/purchases",
     summary="Histórico resumido de compras do produto"
@@ -261,9 +233,6 @@ def purchases(
         log_error(f"Erro ao consultar compras do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
-# --------------------------------------------------
-# SALES
-# --------------------------------------------------
 
 @router.get(
     "/{code}/sales",
@@ -283,6 +252,7 @@ def product_sales_summary(code: str):
     except Exception as e:
         log_error(f"Erro ao consultar vendas do produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
 
 @router.get(
     "/{code}/sales/open-orders",
@@ -304,6 +274,7 @@ def product_sales_open_orders(code: str):
         return error_response(f"Erro inesperado: {e}")
 
 
+
 @router.get(
     "/{code}/sales/billing",
     summary="Resumo de faturamento do produto"
@@ -322,6 +293,7 @@ def product_sales_billing(code: str):
     except Exception as e:
         log_error(f"Erro ao consultar faturamento do produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
 
 @router.get(
     "/{code}/pricing",
@@ -365,6 +337,7 @@ def stock(
         log_error(f"Erro ao consultar estoque do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
+
 @router.get("/{code}/guide", summary="Consulta o roteiro de um produto e seus componentes com filtros e paginação")
 def guide(
     code: str,
@@ -387,14 +360,13 @@ def guide(
         log_error(f"Erro ao consultar roteiro do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
     
+
 @router.get(
     "/{code}/inspection",
     summary="Consulta a inspeção de processos do produto e seus componentes"
 )
 def inspection(
     code: str,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=500),
     max_depth: int = Query(10, ge=1, le=15)
 ):
     """
@@ -402,14 +374,15 @@ def inspection(
     incluindo inspeções dos componentes (via SG1010).
     """
     try:
-        result = get_inspection(code, page, page_size, max_depth)
+        result = get_inspection(code, max_depth)
         return success_response(
             data=result,
-            message=f"Inspeção de {code} retornada com sucesso (página {page}/{result['totalPages']})."
+            message=f"Inspeção de {code} retornada com sucesso."
         )
     except Exception as e:
         log_error(f"Erro ao consultar inspeção do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
 
 @router.get(
     "/{code}/analyser",
