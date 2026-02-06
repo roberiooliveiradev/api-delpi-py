@@ -1159,6 +1159,71 @@ class ProductRepository(BaseRepository):
     # -------------------------------
     # 🔹 GUIDE (SG2010)
     # -------------------------------
+    def _build_guide_hierarchy(self, rows: list[dict]) -> list[dict]:
+        products = {}
+
+        for r in rows:
+            product_code = r["productCode"]
+
+            # -----------------------------
+            # Produto
+            # -----------------------------
+            if product_code not in products:
+                products[product_code] = {
+                    "productCode": product_code,
+                    "bomLevel": r["bomLevel"],
+                    "operations": {}
+                }
+
+            product = products[product_code]
+
+            # -----------------------------
+            # Operação
+            # -----------------------------
+            op_key = (r["routeCode"], r["operationCode"])
+
+            if op_key not in product["operations"]:
+                product["operations"][op_key] = {
+                    "routeCode": r["routeCode"],
+                    "operationCode": r["operationCode"],
+                    "description": r["operationDescription"],
+                    "workCenter": r["workCenter"],
+                    "resourceCode": r["resourceCode"],
+                    "setupHours": r["setupHours"],
+                    "standardTimeHours": r["standardTimeHours"],
+                    "operationType": r["operationType"],
+                    "mandatory": {
+                        "operation": r["mandatoryOperation"] == "1",
+                        "sequence": r["mandatorySequence"] == "1",
+                        "report": r["mandatoryReport"] == "1"
+                    },
+                    "components": []
+                }
+
+            operation = product["operations"][op_key]
+
+            # -----------------------------
+            # Componente (se existir)
+            # -----------------------------
+            if r.get("componentCode"):
+                operation["components"].append({
+                    "componentCode": r["componentCode"],
+                    "description": r["componentDescription"],
+                    "sequence": r["componentSequence"]
+                })
+
+        # -----------------------------
+        # Normaliza para listas
+        # -----------------------------
+        return [
+            {
+                "productCode": p["productCode"],
+                "bomLevel": p["bomLevel"],
+                "operations": list(p["operations"].values())
+            }
+            for p in products.values()
+        ]
+
     def list_guide(
         self,
         code: str,
@@ -1167,17 +1232,13 @@ class ProductRepository(BaseRepository):
         branch: Optional[str] = None,
         max_depth: int = 10
     ) -> dict:
+
         if page < 1:
             raise ValueError("page must be >= 1")
         if not 1 <= page_size <= 500:
             raise ValueError("page_size must be between 1 and 500")
 
         offset = (page - 1) * page_size
-
-        log_info(
-            f"Listando roteiro e componentes vinculados de {code} (depth={max_depth}), "
-            f"página {page}, tamanho {page_size}"
-        )
 
         sg2_filters = ["SG2.D_E_L_E_T_ = ''"]
         sg2_params: list = []
@@ -1189,103 +1250,144 @@ class ProductRepository(BaseRepository):
         where_clause = " AND ".join(sg2_filters)
 
         # ==============================================================
-        # 🔹 COUNT TOTAL DE REGISTROS (SG2010 + SGF010 + SB1010 + SG1010)
+        # COUNT
         # ==============================================================
-        count_query = f"""
+        count_sql = f"""
             WITH RECURSIVE_BOM AS (
-                SELECT G1_COD AS parentCode, G1_COMP AS componentCode, 1 AS level
-                FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+                SELECT
+                    G1_COD  AS parentCode,
+                    G1_COMP AS productCode,
+                    1       AS bomLevel
+                FROM SG1010
+                WHERE D_E_L_E_T_ = ''
+                AND G1_COD = ?
 
                 UNION ALL
 
-                SELECT c.G1_COD, c.G1_COMP, p.level + 1
-                FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
-                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
+                SELECT
+                    C.G1_COD,
+                    C.G1_COMP,
+                    B.bomLevel + 1
+                FROM SG1010 C
+                INNER JOIN RECURSIVE_BOM B
+                    ON B.productCode = C.G1_COD
+                WHERE C.D_E_L_E_T_ = ''
+                AND B.bomLevel < ?
             ),
             CODES AS (
-                SELECT ? AS productCode, 0 AS level
+                SELECT ? AS productCode, 0 AS bomLevel
                 UNION
-                SELECT DISTINCT componentCode AS productCode, level FROM RECURSIVE_BOM
+                SELECT DISTINCT productCode, bomLevel FROM RECURSIVE_BOM
             )
             SELECT COUNT(*) AS total
-            FROM SG2010 AS SG2
-            INNER JOIN CODES ON CODES.productCode = SG2.G2_PRODUTO
-            LEFT JOIN SGF010 AS SGF
-                ON SGF.GF_FILIAL = SG2.G2_FILIAL
-            AND SGF.GF_PRODUTO = SG2.G2_PRODUTO
-            AND SGF.GF_ROTEIRO = SG2.G2_CODIGO
-            AND SGF.GF_OPERAC = SG2.G2_OPERAC
-            AND SGF.D_E_L_E_T_ = ''
-            LEFT JOIN SB1010 AS SB1
-            ON SB1.B1_COD = SGF.GF_COMP
-            AND SB1.D_E_L_E_T_ = ''
+            FROM SG2010 SG2
+            INNER JOIN CODES
+                ON CODES.productCode = SG2.G2_PRODUTO
             WHERE {where_clause}
         """
 
-        count_params = [code, max_depth, code] + sg2_params
-        total_row = self.execute_one(count_query, tuple(count_params))
-        total_rows = int(total_row["total"] or 0)
+        total = int(
+            self.execute_one(
+                count_sql,
+                tuple([code, max_depth, code] + sg2_params)
+            )["total"] or 0
+        )
 
         # ==============================================================
-        # 🔹 CONSULTA PRINCIPAL: OPERAÇÕES + COMPONENTES + DESCRIÇÃO (SG2010 + SGF010 + SB1010)
+        # DATA
         # ==============================================================
-        data_query = f"""
+        data_sql = f"""
             WITH RECURSIVE_BOM AS (
-                SELECT G1_COD AS parentCode, G1_COMP AS componentCode, 1 AS level
-                FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
+                SELECT
+                    G1_COD  AS parentCode,
+                    G1_COMP AS productCode,
+                    1       AS bomLevel
+                FROM SG1010
+                WHERE D_E_L_E_T_ = ''
+                AND G1_COD = ?
 
                 UNION ALL
 
-                SELECT c.G1_COD, c.G1_COMP, p.level + 1
-                FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
-                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
+                SELECT
+                    C.G1_COD,
+                    C.G1_COMP,
+                    B.bomLevel + 1
+                FROM SG1010 C
+                INNER JOIN RECURSIVE_BOM B
+                    ON B.productCode = C.G1_COD
+                WHERE C.D_E_L_E_T_ = ''
+                AND B.bomLevel < ?
             ),
             CODES AS (
-                SELECT ? AS productCode, NULL AS parentCode, 0 AS level
+                SELECT ? AS productCode, 0 AS bomLevel
                 UNION ALL
-                SELECT DISTINCT componentCode AS productCode, parentCode, level FROM RECURSIVE_BOM
+                SELECT DISTINCT productCode, bomLevel FROM RECURSIVE_BOM
             )
-            SELECT 
-                SG2.*,
-                SG2.G2_DESCRI AS operationDescription,
-                SG2.G2_TEMPAD AS standardTimeInHours_Thousands,
-                SG2.G2_SETUP AS setupInHours,
-                SGF.GF_COMP AS componentCode,
-                SB1.B1_DESC AS componentDescription,
-                SGF.GF_TRT AS componentSeq,
-                CODES.level AS bomLevel
-            FROM SG2010 AS SG2
-            INNER JOIN CODES ON CODES.productCode = SG2.G2_PRODUTO
-            LEFT JOIN SGF010 AS SGF
-                ON SGF.GF_FILIAL = SG2.G2_FILIAL
+            SELECT
+                SG2.G2_FILIAL      AS branch,
+                SG2.G2_CODIGO      AS routeCode,
+                SG2.G2_PRODUTO     AS productCode,
+                SG2.G2_OPERAC      AS operationCode,
+                SG2.G2_DESCRI      AS operationDescription,
+
+                SG2.G2_RECURSO     AS resourceCode,
+                SG2.G2_CTRAB       AS workCenter,
+
+                SG2.G2_SETUP       AS setupHours,
+                SG2.G2_TEMPAD      AS standardTimeHours,
+
+                SG2.G2_TPOPER      AS operationType,
+                SG2.G2_OPE_OBR     AS mandatoryOperation,
+                SG2.G2_SEQ_OBR     AS mandatorySequence,
+                SG2.G2_LAU_OBR     AS mandatoryReport,
+
+                SGF.GF_COMP        AS componentCode,
+                SB1.B1_DESC        AS componentDescription,
+                SGF.GF_TRT         AS componentSequence,
+
+                CODES.bomLevel     AS bomLevel
+
+            FROM SG2010 SG2
+            INNER JOIN CODES
+                ON CODES.productCode = SG2.G2_PRODUTO
+            LEFT JOIN SGF010 SGF
+                ON SGF.GF_FILIAL  = SG2.G2_FILIAL
             AND SGF.GF_PRODUTO = SG2.G2_PRODUTO
             AND SGF.GF_ROTEIRO = SG2.G2_CODIGO
-            AND SGF.GF_OPERAC = SG2.G2_OPERAC
+            AND SGF.GF_OPERAC  = SG2.G2_OPERAC
             AND SGF.D_E_L_E_T_ = ''
-            LEFT JOIN SB1010 AS SB1
-            ON SB1.B1_COD = SGF.GF_COMP
+            LEFT JOIN SB1010 SB1
+                ON SB1.B1_COD = SGF.GF_COMP
             AND SB1.D_E_L_E_T_ = ''
             WHERE {where_clause}
-            ORDER BY CODES.level, SG2.G2_PRODUTO, SG2.G2_OPERAC, SGF.GF_TRT
+            ORDER BY
+                CODES.bomLevel,
+                SG2.G2_PRODUTO,
+                SG2.G2_OPERAC,
+                SGF.GF_TRT
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        data_params = [code, max_depth, code] + sg2_params + [offset, page_size]
-        rows = self.execute_query(data_query, tuple(data_params))
+        rows = self.execute_query(
+            data_sql,
+            tuple([code, max_depth, code] + sg2_params + [offset, page_size])
+        )
+
+        hierarchy = self._build_guide_hierarchy(rows)
 
         return {
             "success": True,
-            "total": total_rows,
+            "total": total,
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
-            "filters": {"branch": branch, "max_depth": max_depth},
-            "data": rows
+            "totalPages": (total + page_size - 1) // page_size,
+            "filters": {
+                "branch": branch,
+                "maxDepth": max_depth
+            },
+            "data": hierarchy
         }
+
 
 
     # -------------------------------
