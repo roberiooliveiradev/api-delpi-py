@@ -55,30 +55,9 @@ def search_tables(
         log_error(f"Erro inesperado ao buscar tabelas com descrição '{description}': {e}")
         return error_response(f"Erro inesperado: {e}")
 
-# ----------------------------
-# 📘 1️⃣ Listagem de tabelas
-# ----------------------------
-@router.get("/tables", summary="Listagem de tabelas com paginação")
-def tables(
-    page: int = Query(1, ge=1, description="Número da página"),
-    limit: int = Query(50, ge=1, le=200, description="Quantidade de registros por página")
-):
-    """
-    Retorna uma lista paginada de tabelas do Protheus.
-    """
-    try:
-        result = get_tables(page=page, limit=limit)
-        return success_response(
-            data=result,
-            message="Listagem paginada realizada com sucesso!"
-        )
-    except Exception as e:
-        log_error(f"Erro ao listar tabelas: {e}")
-        return error_response(f"Erro inesperado: {e}")
-
 
 # ----------------------------
-# 📘 2️⃣ Busca de tabela por nome
+# Busca de tabela por nome
 # ----------------------------
 @router.get("/tables/{tableName}", summary="Consulta informações de tabela")
 def table(tableName: str):
@@ -94,7 +73,7 @@ def table(tableName: str):
 
 
 # ----------------------------
-# 📘 3️⃣ Consulta colunas de tabela
+# Consulta colunas de tabela
 # ----------------------------
 @router.get("/tables/{tableName}/columns", summary="Consulta colunas de tabela com paginação")
 def table_columns(
@@ -120,7 +99,7 @@ def table_columns(
         return error_response(f"Erro inesperado: {e}")
     
 # ----------------------------
-# 📘 Consulta indices
+# Consulta indices
 # ----------------------------
 @router.get("/tables/{tableName}/indexes", summary="Consulta índices (SIX010)")
 def table_indexes(tableName: str):
@@ -131,7 +110,7 @@ def table_indexes(tableName: str):
         return error_response(str(e))
     
 # ----------------------------
-# 📘 Consulta relacionamentos
+# Consulta relacionamentos
 # ----------------------------
 @router.get("/tables/{tableName}/relations", summary="Consulta relacionamentos (SX9010)")
 def table_relations(tableName: str):
@@ -142,7 +121,7 @@ def table_relations(tableName: str):
         return error_response(str(e))
     
 # ----------------------------
-# 📘 Consulta schema
+# Consulta schema
 # ----------------------------
 @router.get("/tables/{tableName}/schema", summary="Schema completo da tabela (SX2, SX3, SIX, SX9)")
 def table_schema(tableName: str):
@@ -153,7 +132,7 @@ def table_schema(tableName: str):
         return error_response(str(e))
 
 # ----------------------------
-# 📘 Consulta schema
+# Consulta schema
 # ----------------------------
 @router.get("/tables/{tableName}/columns/search", summary="Buscar colunas por texto")
 def search_columns(tableName: str, q: str = Query(..., min_length=2)):
@@ -164,7 +143,7 @@ def search_columns(tableName: str, q: str = Query(..., min_length=2)):
         return error_response(str(e))
 
 # ----------------------------
-# 🔍 6️⃣ Busca global de colunas por descrição
+# Busca global de colunas por descrição
 # ----------------------------
 @router.get(
     "/columns/search",
@@ -211,7 +190,7 @@ def search_columns_global(
         return error_response(f"Erro inesperado: {e}")
 
 # ----------------------------
-# 🔐 5️⃣ Login simples
+# Login simples
 # ----------------------------
 VALID_USER = settings.DB_USER
 VALID_PASS = settings.DB_PASSWORD
