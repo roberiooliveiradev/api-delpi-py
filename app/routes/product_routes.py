@@ -74,13 +74,16 @@ def search_products_post_route(body: ProductSearchRequest):
 def product(code: str):
     try:
         product = get_product(code)
+
         return success_response(
-            data={"produto": product.model_dump(by_alias=True)},
+            data={"produto": product.model_dump()},  
             message="Produto localizado com sucesso!"
         )
+
     except Exception as e:
         log_error(f"Erro ao consultar produto {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+
 
 @router.get("/{code}/structure", summary="Consulta estrutura (BOM) paginada via CTE")
 def structure(

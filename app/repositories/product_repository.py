@@ -13,27 +13,144 @@ class ProductRepository(BaseRepository):
     """
 
     def get_product_by_code(self, code: str) -> dict:
-        log_info(f"Consultando produto {code} no Protheus...")
-        query = """
-            SELECT *
-            FROM SB1010
-            WHERE D_E_L_E_T_ = ''
-              AND B1_COD = ?
-        """
-        product = self.execute_one(query, (code,))
-        if not product:
-            raise BusinessLogicError(f"Produto com código '{code}' não encontrado.")
-        return product
+        log_info(f"Consultando produto {code} no Protheus (SB1010)...")
 
-    def list_products(self, limit: int = 10) -> list[dict]:
-        log_info(f"Buscando até {limit} produtos do Protheus...")
-        query = f"""
-            SELECT TOP {limit} *
+        sql = """
+            SELECT
+                -- =====================
+                -- IDENTIFICAÇÃO
+                -- =====================
+                B1_GRUPO     AS group_code,
+                B1_COD       AS code,
+                B1_DESC      AS description,
+                B1_TIPO      AS type,
+                B1_SUBGRUP   AS subgroup,
+                B1_CODANT    AS previous_code,
+                B1_ATIVO     AS active,
+                B1_MSBLQL   AS blocked,
+
+                -- =====================
+                -- COMERCIAL
+                -- =====================
+                B1_REFEREN   AS customer_reference,
+                B1_REFCANT   AS customer_reference_old,
+                B1_PRV1      AS sale_price,
+                B1_CONTRAT   AS contractual_product,
+                B1_CLASSVE   AS sales_class,
+
+                -- =====================
+                -- ENGENHARIA / PRODUÇÃO
+                -- =====================
+                B1_CODDES    AS drawing_code,
+                B1_UM        AS unit,
+                B1_SEGUM     AS secondary_unit,
+                B1_CONV      AS conversion_factor,
+                B1_TIPCONV   AS conversion_type,
+                B1_TPMAT     AS material_type,
+                B1_LINHA     AS production_line,
+                B1_TIPODEC   AS operation_decimal_type,
+                B1_REVATU    AS current_revision,
+                B1_UREV      AS last_revision_date,
+                B1_PESO      AS net_weight,
+
+                -- =====================
+                -- ESTOQUE / LOGÍSTICA
+                -- =====================
+                B1_LOCPAD    AS default_warehouse,
+                B1_QE        AS package_quantity,
+                B1_CODBAR    AS barcode,
+                B1_EMBDELP   AS customer_packaging,
+                B1_PRODSBP   AS make_or_buy,
+
+                -- =====================
+                -- COMPRAS
+                -- =====================
+                B1_UCOM      AS last_purchase_date,
+                B1_UPRC      AS last_purchase_price,
+                B1_TIPE      AS lead_time_type,
+                B1_SOLICIT   AS requester_restriction,
+
+                -- =====================
+                -- CUSTOS
+                -- =====================
+                B1_CUSTD     AS standard_cost,
+                B1_UCALSTD   AS standard_cost_date,
+                B1_MCUSTD   AS cost_currency,
+                B1_DATREF   AS cost_reference_date,
+                B1_DESPIMP  AS import_expense,
+
+                -- =====================
+                -- FISCAL / TRIBUTÁRIO
+                -- =====================
+                B1_POSIPI   AS ncm_ipi_position,
+                B1_ORIGEM   AS origin,
+                B1_IMPORT   AS imported_product,
+                B1_GRTRIB   AS tax_group,
+                B1_TE       AS entry_tes,
+                B1_TS       AS exit_tes,
+                B1_PICM     AS icms_rate,
+                B1_IPI      AS ipi_rate,
+                B1_PIS      AS pis_incidence,
+                B1_PPIS     AS pis_percent,
+                B1_COFINS   AS cofins_incidence,
+                B1_PCOFINS  AS cofins_percent,
+                B1_CSLL     AS csll_incidence,
+                B1_INSS     AS inss_incidence,
+                B1_RETOPER  AS retention_by_operation,
+                B1_ANUENTE  AS customs_authority,
+                B1_MIDIA    AS media_product,
+                B1_QTMIDIA  AS media_quantity,
+                B1_GRPTI    AS intelligent_tes_group,
+
+                -- =====================
+                -- QUALIDADE / PCP
+                -- =====================
+                B1_YHOHS    AS rohs_indicator,
+                B1_RASTRO   AS traceability,
+                B1_GARANT   AS warranty_product,
+                B1_MRP      AS mrp_considered,
+                B1_FLAGSUG  AS suggestion_flag,
+                B1_CPOTENC  AS power_control,
+
+                -- =====================
+                -- CONTÁBIL
+                -- =====================
+                B1_CONTA    AS accounting_account,
+                B1_CC       AS cost_center,
+                B1_APROPRI  AS appropriation_type,
+
+                -- =====================
+                -- SISTEMA / CONTROLES DELPI
+                -- =====================
+                B1_CONINI   AS initial_consumption_date,
+                B1_USERLGI  AS created_by,
+                B1_USERLGA  AS updated_by,
+                B1_YSC      AS mandatory_cc_sc,
+                B1_YPC      AS mandatory_cc_pc,
+                B1_YPV      AS mandatory_cc_pv,
+                B1_YMI      AS mandatory_cc_mi,
+                B1_YNFE     AS mandatory_cc_nfe,
+                B1_YVLPC    AS approval_validation,
+                B1_YCAT     AS delpi_category,
+                B1_ZDLPSEG  AS delpi_segment
+
             FROM SB1010
             WHERE D_E_L_E_T_ = ''
-            ORDER BY B1_COD
+            AND B1_COD = ?
         """
-        return self.execute_query(query)
+
+        product = self.execute_one(sql, (code,))
+
+        if not product:
+            raise BusinessLogicError(
+                f"Produto com código '{code}' não encontrado."
+            )
+
+        return {
+            "success": True,
+            "data": product
+        }
+
     
     # -------------------------------
     # 🔹 SEACH PRODUCTS BY DESCRIPTION 
@@ -52,152 +169,83 @@ class ProductRepository(BaseRepository):
             raise ValueError("Description cannot be empty")
 
         offset = (page - 1) * page_size
-
-        # ------------------------------
-        # Preparação
-        # ------------------------------
         desc_clean = description.strip()
-        terms = [t.strip() for t in desc_clean.split() if t.strip()]
-        desc_length = len(desc_clean)
+        terms = [t for t in desc_clean.split() if t]
 
-        # Padrao composto: CABO%PP%PT
-        pattern = "%".join(terms) if len(terms) > 1 else desc_clean
-
-        # =====================================================
-        # WHERE otimizado + case/acento insensitive
-        # =====================================================
+        # -----------------------------
+        # WHERE simples (OR)
+        # -----------------------------
         where_clauses = ["SB1.D_E_L_E_T_ = ''"]
-        where_params = []
+        where_terms = []
+        params = []
 
-        # 1) Padrão composto (somente se houver mais de um termo)
-        if len(terms) > 1:
-            where_clauses.append("SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?")
-            where_params.append(f"%{pattern}%")
-
-        # 2) Todos os termos (AND)
         for t in terms:
-            where_clauses.append("SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?")
-            where_params.append(f"%{t}%")
+            where_terms.append(
+                "SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ?"
+            )
+            params.append(f"%{t}%")
 
+        where_clauses.append("(" + " OR ".join(where_terms) + ")")
         where_sql = " AND ".join(where_clauses)
 
-        # =====================================================
-        # SCORE (Ranking otimizado + case-insensitive)
-        # =====================================================
-        score_parts = []
-        score_params = []
+        # -----------------------------
+        # SCORE claro e barato
+        # -----------------------------
+        score_parts = [
+            "CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 50 ELSE 0 END"
+        ]
+        score_params = [f"%{desc_clean}%"]
 
-        # 1) Frase completa
-        score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 50 ELSE 0 END")
-        score_params.append(f"%{desc_clean}%")
-
-        if len(terms) > 1:
-            # 2) Padrão composto — CABO%PP%PT
-            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 40 ELSE 0 END")
-            score_params.append(f"%{pattern}%")
-
-            # 3) Pesos individuais
-            for t in terms:
-                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 25 ELSE 0 END")
-                score_params.append(f"{t} %")
-
-                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 15 ELSE 0 END")
-                score_params.append(f"% {t} %")
-
-                score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 5 ELSE 0 END")
-                score_params.append(f"%{t}%")
-
-            # Similaridade normalizada
+        for t in terms:
             score_parts.append(
-                f"""
-                CAST(
-                    CASE 
-                        WHEN LEN(SB1.B1_DESC) = 0 THEN 0
-                        ELSE ROUND(
-                            10 * (
-                                1.0 - ABS(LEN(SB1.B1_DESC) - {desc_length}) /
-                                (CASE 
-                                    WHEN LEN(SB1.B1_DESC) > {desc_length} THEN LEN(SB1.B1_DESC)
-                                    ELSE {desc_length}
-                                END)
-                            ), 
-                        0)
-                    END
-                AS INT)
-                """
+                "CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 10 ELSE 0 END"
             )
-
-        else:
-            # Caso apenas 1 termo
-            term = terms[0]
-
-            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 30 ELSE 0 END")
-            score_params.append(f"{term} %")
-
-            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 20 ELSE 0 END")
-            score_params.append(f"% {term} %")
-
-            score_parts.append("CASE WHEN SB1.B1_DESC COLLATE Latin1_General_CI_AI LIKE ? THEN 10 ELSE 0 END")
-            score_params.append(f"%{term}%")
-
-            score_parts.append(
-                f"""
-                CAST(
-                    CASE 
-                        WHEN LEN(SB1.B1_DESC) = 0 THEN 0
-                        ELSE ROUND(
-                            10 * (
-                                1.0 - ABS(LEN(SB1.B1_DESC) - {len(term)}) /
-                                (CASE 
-                                    WHEN LEN(SB1.B1_DESC) > {len(term)} THEN LEN(SB1.B1_DESC)
-                                    ELSE {len(term)}
-                                END)
-                            ), 
-                        0)
-                    END
-                AS INT)
-                """
-            )
+            score_params.append(f"%{t}%")
 
         score_sql = " + ".join(score_parts)
 
-        # =====================================================
+        # -----------------------------
         # COUNT
-        # =====================================================
+        # -----------------------------
         count_sql = f"""
             SELECT COUNT(*) AS total
-            FROM SB1010 AS SB1
+            FROM SB1010 SB1
             WHERE {where_sql}
         """
-        total_rows = int(self.execute_one(count_sql, tuple(where_params))["total"] or 0)
+        total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
 
-        # =====================================================
-        # RESULT QUERY
-        # =====================================================
+        # -----------------------------
+        # DATA
+        # -----------------------------
         sql = f"""
-            SELECT 
-                SB1.B1_COD,
-                SB1.B1_DESC,
-                SB1.B1_GRUPO,
-                SB1.B1_TIPO,
-                SB1.B1_UM,
-                SB1.B1_ATIVO,
-                ({score_sql}) AS relevance_score
-            FROM SB1010 AS SB1
+            SELECT
+                SB1.B1_GRUPO     AS group_code,
+                SB1.B1_COD       AS code,
+                SB1.B1_DESC      AS description,
+                SB1.B1_UM        AS unit,
+                SB1.B1_TIPO      AS type,
+                SB1.B1_SUBGRUP   AS subgroup,
+                SB1.B1_CODANT    AS previous_code,
+                SB1.B1_ATIVO     AS active,
+                SB1.B1_MSBLQL    AS blocked,
+                ({score_sql})    AS relevance_score
+            FROM SB1010 SB1
             WHERE {where_sql}
-            ORDER BY relevance_score DESC, SB1.B1_COD ASC
+            ORDER BY relevance_score DESC, SB1.B1_DESC, SB1.B1_COD
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
 
-        final_params = score_params + where_params + [offset, page_size]
-        rows = self.execute_query(sql, tuple(final_params))
+        rows = self.execute_query(
+            sql,
+            tuple(score_params + params + [offset, page_size])
+        )
 
         return {
             "success": True,
-            "total": total_rows,
+            "total": total,
             "page": page,
             "pageSize": page_size,
-            "totalPages": (total_rows + page_size - 1) // page_size,
+            "totalPages": (total + page_size - 1) // page_size,
             "description": description,
             "results": rows
         }
@@ -1088,7 +1136,7 @@ class ProductRepository(BaseRepository):
         }
 
     # -------------------------------
-    # 🔹 STOCK (SB2010)
+    # 🔹 STOCK + LOCALIZAÇÃO FÍSICA (SB2010 + SBZ010)
     # -------------------------------
     def list_stock(
         self,
@@ -1106,7 +1154,10 @@ class ProductRepository(BaseRepository):
 
         offset = (page - 1) * page_size
 
-        filters = ["SB2.D_E_L_E_T_ = ''", "SB2.B2_COD = ?"]
+        filters = [
+            "SB2.D_E_L_E_T_ = ''",
+            "SB2.B2_COD = ?"
+        ]
         params = [code]
 
         if branch:
@@ -1119,24 +1170,43 @@ class ProductRepository(BaseRepository):
 
         where_clause = " AND ".join(filters)
 
+        # -------------------------------
+        # 🔹 TOTAL (SB2010)
+        # -------------------------------
         count_sql = f"""
             SELECT COUNT(*) AS total
             FROM SB2010 SB2
             WHERE {where_clause}
         """
 
-        total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
+        total = int(
+            self.execute_one(count_sql, tuple(params))["total"] or 0
+        )
 
+        # -------------------------------
+        # 🔹 DADOS DE ESTOQUE + SBZ
+        # -------------------------------
         data_sql = f"""
             SELECT
-                SB2.B2_COD      AS produto,
-                SB2.B2_FILIAL   AS filial,
-                SB2.B2_LOCAL    AS local,
-                SB2.B2_QATU     AS saldo,
-                SB2.B2_QEMP     AS empenhado,
-                SB2.B2_RESERVA  AS reservado,
-                (SB2.B2_QATU - SB2.B2_QEMP - SB2.B2_RESERVA) AS disponivel
+                SB2.B2_COD        AS produto,
+                SB2.B2_FILIAL     AS filial,
+                SB2.B2_LOCAL      AS armazem,
+                SB2.B2_QATU       AS saldo,
+                SB2.B2_QEMP       AS empenhado,
+                SB2.B2_RESERVA    AS reservado,
+                (SB2.B2_QATU - SB2.B2_QEMP - SB2.B2_RESERVA) AS disponivel,
+
+                -- LOCALIZAÇÃO FÍSICA REAL (SBZ)
+                SBZ.BZ_MPLOCAL    AS localizacao_fisica,
+                SBZ.BZ_LOCPAD     AS armazem_padrao,
+                SBZ.BZ_CUSTO      AS centro_custo,
+                SBZ.BZ_GALPAO     AS galpao
+
             FROM SB2010 SB2
+            LEFT JOIN SBZ010 SBZ
+                ON  SBZ.BZ_COD    = SB2.B2_COD
+                AND SBZ.BZ_FILIAL = SB2.B2_FILIAL
+
             WHERE {where_clause}
             ORDER BY SB2.B2_FILIAL, SB2.B2_LOCAL
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY

@@ -18,15 +18,19 @@ def get_product(code: str) -> Product:
     """
     repo = ProductRepository()
     log_info(f"Iniciando consulta do produto {code} via repositório")
+
     try:
         result = repo.get_product_by_code(code)
-        return Product(**result)
+        return Product(**result["data"])
+
     except BusinessLogicError as e:
         log_error(str(e))
         raise
+
     except Exception as e:
         log_error(f"Erro inesperado ao buscar produto {code}: {e}")
         raise DatabaseConnectionError(str(e))
+
 
 
 def get_products(limit: int = 10) -> list[Product]:
