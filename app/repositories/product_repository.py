@@ -71,49 +71,129 @@ class ProductRepository(BaseRepository):
             return None
 
 
-    def _build_hierarchy(self, rows: list[dict], root_code: str, mode: str = "structure") -> dict:
+    def _build_hierarchy(
+        self,
+        rows: list[dict],
+        root_code: str,
+        mode: str = "structure"
+    ) -> dict:
         """
-        Monta a hierarquia em formato JSON aninhado.
+        Builds a nested JSON hierarchy.
+
         mode:
-            - "structure": monta árvore de componentes (pai → filhos)
-            - "parents": monta árvore de produtos-pai (filho → pais)
+            - "structure": component tree (parent → children)
+            - "parents": where-used tree (child → parents)
         """
         from collections import defaultdict
 
+        # Each node always has a components list
         nodes = defaultdict(lambda: {"components": []})
-        descriptions = {}
 
         for row in rows:
             if mode == "structure":
-                parent = row["parentCode"]
-                child = row["componentCode"]
-                parentDesc = row.get("parentDesc") or ""
-                childDesc = row.get("componentDesc") or ""
+                parent_code = row["parent_code"]
+                child_code = row["component_code"]
+                parent_description = row.get("parent_description") or ""
+                child_description = row.get("component_description") or ""
             else:
-                # Modo 'parents'
-                parent = row["parentCode"]
-                child = row["childCode"]
-                parentDesc = row.get("parentDesc") or ""
-                childDesc = row.get("childDesc") or ""
+                # parents (where-used)
+                parent_code = row["parent_code"]
+                child_code = row["child_code"]
+                parent_description = row.get("parent_description") or ""
+                child_description = row.get("child_description") or ""
 
-            descriptions[parent] = parentDesc
-            descriptions[child] = childDesc
+            # -----------------------------
+            # Parent node
+            # -----------------------------
+            nodes[parent_code]["code"] = parent_code
+            nodes[parent_code]["description"] = parent_description
+            nodes[parent_code]["quantity"] = float(row.get("quantity") or 0)
 
-            nodes[parent]["code"] = parent
-            nodes[parent]["description"] = parentDesc
-            nodes[parent]["quantity"] = float(row.get("quantity", 0))
-            nodes[child]["code"] = child
-            nodes[child]["description"] = childDesc
-            nodes[child]["quantity"] = float(row.get("quantity", 0))
+            # -----------------------------
+            # Child node
+            # -----------------------------
+            nodes[child_code]["code"] = child_code
+            nodes[child_code]["description"] = child_description
+            nodes[child_code]["quantity"] = float(row.get("quantity") or 0)
 
-            # Direção da relação
+            # -----------------------------
+            # Relationship direction
+            # -----------------------------
             if mode == "structure":
-                nodes[parent]["components"].append(nodes[child])
+                # parent → components
+                nodes[parent_code]["components"].append(nodes[child_code])
             else:
-                # No caso dos pais, o filho é quem contém o pai
-                nodes[child]["components"].append(nodes[parent])
+                # child → parents
+                nodes[child_code]["components"].append(nodes[parent_code])
 
         return nodes[root_code]
+
+
+    def _build_guide_hierarchy(self, rows: list[dict]) -> list[dict]:
+        products = {}
+
+        for r in rows:
+            product_code = r["product_code"]
+
+            # -----------------------------
+            # Product
+            # -----------------------------
+            if product_code not in products:
+                products[product_code] = {
+                    "product_code": product_code,
+                    "bom_level": r["bom_level"],
+                    "operations": {}
+                }
+
+            product = products[product_code]
+
+            # -----------------------------
+            # Operation
+            # -----------------------------
+            op_key = (r["route_code"], r["operation_code"])
+
+            if op_key not in product["operations"]:
+                product["operations"][op_key] = {
+                    "route_code": r["route_code"],
+                    "operation_code": r["operation_code"],
+                    "operation_description": r["operation_description"],
+                    "work_center": r["work_center"],
+                    "resource_code": r["resource_code"],
+                    "setup_hours": r["setup_hours"],
+                    "standard_time_hours": r["standard_time_hours"],
+                    "operation_type": r["operation_type"],
+                    "mandatory": {
+                        "operation": r["mandatory_operation"] == "1",
+                        "sequence": r["mandatory_sequence"] == "1",
+                        "report": r["mandatory_report"] == "1"
+                    },
+                    "components": []
+                }
+
+            operation = product["operations"][op_key]
+
+            # -----------------------------
+            # Component (if exists)
+            # -----------------------------
+            if r.get("component_code"):
+                operation["components"].append({
+                    "component_code": r["component_code"],
+                    "component_description": r["component_description"],
+                    "component_sequence": r["component_sequence"]
+                })
+
+        # -----------------------------
+        # Normalize dicts to lists
+        # -----------------------------
+        return [
+            {
+                "product_code": p["product_code"],
+                "bom_level": p["bom_level"],
+                "operations": list(p["operations"].values())
+            }
+            for p in products.values()
+        ]
+
 
     # -------------------------------
     # 🔹 PRODUCT (SB1010)  
@@ -350,8 +430,8 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "description": description,
             "results": rows
         }
@@ -360,95 +440,114 @@ class ProductRepository(BaseRepository):
     # -------------------------------
     # 🔹 STRUCTURE (BOM)
     # -------------------------------
-    def list_structure(self, code: str, max_depth: int = 5, page: int = 1, page_size: int = 100):
+    def list_structure(
+        self,
+        code: str,
+        max_depth: int = 5,
+        page: int = 1,
+        page_size: int = 100
+    ) -> dict:
         """
-        Retorna a estrutura (BOM) do produto em formato hierárquico,
-        incluindo tipo de produto (B1_TIPO) e unidade de medida (B1_UM).
-        Compatível com SQL Server.
+        Returns the product BOM (structure) in hierarchical format,
+        including product type (B1_TIPO) and unit of measure (B1_UM).
+        SQL Server compatible.
         """
 
         data_query = """
-            WITH RECURSIVE_BOM AS (
+            WITH recursive_bom AS (
                 SELECT 
-                    G1_COD AS parentCode,
-                    G1_COMP AS componentCode,
+                    G1_COD   AS parent_code,
+                    G1_COMP  AS component_code,
                     G1_QUANT AS quantity,
-                    1 AS level
+                    1        AS bom_level
                 FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
-                -- Filtra apenas itens válidos pela data final
+                WHERE D_E_L_E_T_ = ''
+                AND G1_COD = ?
                 AND G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
 
                 UNION ALL
 
                 SELECT 
-                    c.G1_COD AS parentCode,
-                    c.G1_COMP AS componentCode,
-                    c.G1_QUANT AS quantity,
-                    p.level + 1 AS level
+                    c.G1_COD,
+                    c.G1_COMP,
+                    c.G1_QUANT,
+                    p.bom_level + 1
                 FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
-                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
-                -- Filtra novamente na recursão
+                INNER JOIN recursive_bom p
+                    ON p.component_code = c.G1_COD
+                WHERE c.D_E_L_E_T_ = ''
+                AND p.bom_level < ?
                 AND c.G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
             )
             SELECT 
-                rb.parentCode,
-                pdesc.B1_DESC AS parentDesc,
-                pdesc.B1_TIPO AS parentType,
-                pdesc.B1_UM AS parentUM,
-                rb.componentCode,
-                cdesc.B1_DESC AS componentDesc,
-                cdesc.B1_TIPO AS componentType,
-                cdesc.B1_UM AS componentUM,
+                rb.parent_code,
+                parent.B1_DESC AS parent_description,
+                parent.B1_TIPO AS parent_type,
+                parent.B1_UM   AS parent_unit,
+
+                rb.component_code,
+                comp.B1_DESC   AS component_description,
+                comp.B1_TIPO   AS component_type,
+                comp.B1_UM     AS component_unit,
+
                 rb.quantity,
-                rb.level
-            FROM RECURSIVE_BOM rb
-            LEFT JOIN SB1010 pdesc WITH (NOLOCK)
-                ON pdesc.B1_COD = rb.parentCode AND pdesc.D_E_L_E_T_ = ''
-            LEFT JOIN SB1010 cdesc WITH (NOLOCK)
-                ON cdesc.B1_COD = rb.componentCode AND cdesc.D_E_L_E_T_ = ''
-            ORDER BY rb.level, rb.parentCode, rb.componentCode;
+                rb.bom_level
+            FROM recursive_bom rb
+            LEFT JOIN SB1010 parent WITH (NOLOCK)
+                ON parent.B1_COD = rb.parent_code
+            AND parent.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 comp WITH (NOLOCK)
+                ON comp.B1_COD = rb.component_code
+            AND comp.D_E_L_E_T_ = ''
+            ORDER BY
+                rb.bom_level,
+                rb.parent_code,
+                rb.component_code;
         """
 
         rows = self.execute_query(data_query, (code, max_depth))
 
-        # Monta estrutura hierárquica
-        items = {}
+        items: dict[str, dict] = {}
+
         for r in rows:
-            comp = {
-                "code": r["componentCode"],
-                "description": r["componentDesc"],
-                "type": r["componentType"],
-                "unit": r["componentUM"],
+            component_node = {
+                "code": r["component_code"],
+                "description": r["component_description"],
+                "type": r["component_type"],
+                "unit": r["component_unit"],
                 "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
                 "components": []
             }
 
-            parent_code = r["parentCode"]
+            parent_code = r["parent_code"]
+
             if parent_code not in items:
                 items[parent_code] = {
                     "code": parent_code,
-                    "description": r["parentDesc"],
-                    "type": r["parentType"],
-                    "unit": r["parentUM"],
+                    "description": r["parent_description"],
+                    "type": r["parent_type"],
+                    "unit": r["parent_unit"],
                     "quantity": 1.0,
                     "components": []
                 }
-            items[parent_code]["components"].append(comp)
-            items[comp["code"]] = comp
 
-        root = items.get(code, {
-            "code": code,
-            "description": None,
-            "type": None,
-            "unit": None,
-            "quantity": 1.0,
-            "components": []
-        })
+            items[parent_code]["components"].append(component_node)
+            items[component_node["code"]] = component_node
 
-        # Paginação somente no nível raiz
-        root_components = [items[c["code"]] for c in root["components"]] if "components" in root else []
+        root = items.get(
+            code,
+            {
+                "code": code,
+                "description": None,
+                "type": None,
+                "unit": None,
+                "quantity": 1.0,
+                "components": []
+            }
+        )
+
+        # Pagination only at root level
+        root_components = root.get("components", [])
         offset = (page - 1) * page_size
         root["components"] = root_components[offset: offset + page_size]
 
@@ -456,111 +555,124 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": len(root_components),
             "page": page,
-            "pageSize": page_size,
-            "totalPages": math.ceil(len(root_components) / page_size),
+            "page_size": page_size,
+            "total_pages": math.ceil(len(root_components) / page_size),
             "data": root
         }
-    
+
 
     # -------------------------------
     # 🔹 STRUCTURE (BOM) - FULL
     # -------------------------------
-    def list_structure_full(self, code: str):
+    def list_structure_full(self, code: str) -> dict:
         """
-        Retorna a estrutura (BOM) do produto em formato hierárquico,
-        incluindo tipo de produto (B1_TIPO) e unidade de medida (B1_UM).
-        Compatível com SQL Server.
+        Returns the full product BOM (structure) in hierarchical format,
+        including product type (B1_TIPO) and unit of measure (B1_UM).
+        SQL Server compatible.
         """
 
         data_query = """
-            WITH RECURSIVE_BOM AS (
+            WITH recursive_bom AS (
                 SELECT 
-                    G1_COD AS parentCode,
-                    G1_COMP AS componentCode,
+                    G1_COD   AS parent_code,
+                    G1_COMP  AS component_code,
                     G1_QUANT AS quantity,
-                    1 AS level
+                    1        AS bom_level
                 FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COD = ?
-                -- Filtra apenas itens válidos pela data final
+                WHERE D_E_L_E_T_ = ''
+                AND G1_COD = ?
                 AND G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
 
                 UNION ALL
 
                 SELECT 
-                    c.G1_COD AS parentCode,
-                    c.G1_COMP AS componentCode,
-                    c.G1_QUANT AS quantity,
-                    p.level + 1 AS level
+                    c.G1_COD,
+                    c.G1_COMP,
+                    c.G1_QUANT,
+                    p.bom_level + 1
                 FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_BOM p ON p.componentCode = c.G1_COD
-                WHERE c.D_E_L_E_T_ = '' AND p.level < 50
-                -- Filtra novamente na recursão
+                INNER JOIN recursive_bom p
+                    ON p.component_code = c.G1_COD
+                WHERE c.D_E_L_E_T_ = ''
+                AND p.bom_level < 50
                 AND c.G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
             )
             SELECT 
-                rb.parentCode,
-                pdesc.B1_DESC AS parentDesc,
-                pdesc.B1_TIPO AS parentType,
-                pdesc.B1_UM AS parentUM,
-                rb.componentCode,
-                cdesc.B1_DESC AS componentDesc,
-                cdesc.B1_TIPO AS componentType,
-                cdesc.B1_UM AS componentUM,
+                rb.parent_code,
+                parent.B1_DESC AS parent_description,
+                parent.B1_TIPO AS parent_type,
+                parent.B1_UM   AS parent_unit,
+
+                rb.component_code,
+                comp.B1_DESC   AS component_description,
+                comp.B1_TIPO   AS component_type,
+                comp.B1_UM     AS component_unit,
+
                 rb.quantity,
-                rb.level
-            FROM RECURSIVE_BOM rb
-            LEFT JOIN SB1010 pdesc WITH (NOLOCK)
-                ON pdesc.B1_COD = rb.parentCode AND pdesc.D_E_L_E_T_ = ''
-            LEFT JOIN SB1010 cdesc WITH (NOLOCK)
-                ON cdesc.B1_COD = rb.componentCode AND cdesc.D_E_L_E_T_ = ''
-            ORDER BY rb.level, rb.parentCode, rb.componentCode;
+                rb.bom_level
+            FROM recursive_bom rb
+            LEFT JOIN SB1010 parent WITH (NOLOCK)
+                ON parent.B1_COD = rb.parent_code
+            AND parent.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 comp WITH (NOLOCK)
+                ON comp.B1_COD = rb.component_code
+            AND comp.D_E_L_E_T_ = ''
+            ORDER BY
+                rb.bom_level,
+                rb.parent_code,
+                rb.component_code;
         """
 
         rows = self.execute_query(data_query, (code,))
 
-        # Monta estrutura hierárquica
-        items = {}
+        # -------------------------------------------------
+        # Build hierarchical structure
+        # -------------------------------------------------
+        items: dict[str, dict] = {}
+
         for r in rows:
-            comp = {
-                "code": r["componentCode"],
-                "description": r["componentDesc"],
-                "type": r["componentType"],
-                "unit": r["componentUM"],
+            component_node = {
+                "code": r["component_code"],
+                "description": r["component_description"],
+                "type": r["component_type"],
+                "unit": r["component_unit"],
                 "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
                 "components": []
             }
 
-            parent_code = r["parentCode"]
+            parent_code = r["parent_code"]
+
             if parent_code not in items:
                 items[parent_code] = {
                     "code": parent_code,
-                    "description": r["parentDesc"],
-                    "type": r["parentType"],
-                    "unit": r["parentUM"],
+                    "description": r["parent_description"],
+                    "type": r["parent_type"],
+                    "unit": r["parent_unit"],
                     "quantity": 1.0,
                     "components": []
                 }
-            items[parent_code]["components"].append(comp)
-            items[comp["code"]] = comp
 
-        root = items.get(code, {
-            "code": code,
-            "description": None,
-            "type": None,
-            "unit": None,
-            "quantity": 1.0,
-            "components": []
-        })
+            items[parent_code]["components"].append(component_node)
+            items[component_node["code"]] = component_node
 
-        # Paginação somente no nível raiz
-        root_components = [items[c["code"]] for c in root["components"]] if "components" in root else []
+        root = items.get(
+            code,
+            {
+                "code": code,
+                "description": None,
+                "type": None,
+                "unit": None,
+                "quantity": 1.0,
+                "components": []
+            }
+        )
 
         return {
             "success": True,
-            "total": len(root_components),
+            "total": len(root.get("components", [])),
             "page": None,
-            "pageSize": None,
-            "totalPages": None,
+            "page_size": None,
+            "total_pages": None,
             "data": root
         }
 
@@ -568,12 +680,18 @@ class ProductRepository(BaseRepository):
     # -------------------------------
     # 🔹 PARENTS (WHERE USED)
     # -------------------------------
-    def list_parents(self, code: str, max_depth: int = 10, page: int = 1, page_size: int = 50) -> dict:
+    def list_parents(
+        self,
+        code: str,
+        max_depth: int = 10,
+        page: int = 1,
+        page_size: int = 50
+    ) -> dict:
         """
-        Retorna os produtos pais (WHERE USED) em formato hierárquico.
-        Inclui tipo de produto (B1_TIPO) e unidade de medida (B1_UM).
-        Compatível com SQL Server.
-        Mantém quantidades originais (G1_QUANT).
+        Returns parent products (WHERE USED) in hierarchical format.
+        Includes product type (B1_TIPO) and unit of measure (B1_UM).
+        SQL Server compatible.
+        Preserves original quantities (G1_QUANT).
         """
 
         if page < 1:
@@ -583,96 +701,116 @@ class ProductRepository(BaseRepository):
         if not 1 <= max_depth <= 50:
             raise ValueError("max_depth must be between 1 and 50")
 
-        log_info(f"Consultando pais (WHERE USED) de {code}, depth={max_depth}, page={page}, size={page_size}")
+        log_info(
+            f"Querying parents (WHERE USED) for {code}, "
+            f"depth={max_depth}, page={page}, size={page_size}"
+        )
 
         # =====================================================
-        # 🔹 CTE recursiva sem paginação interna
+        # Recursive CTE (no internal pagination)
         # =====================================================
         data_query = """
-            WITH RECURSIVE_PARENTS AS (
+            WITH recursive_parents AS (
                 SELECT 
-                    G1_COD AS parentCode,
-                    G1_COMP AS childCode,
+                    G1_COD   AS parent_code,
+                    G1_COMP  AS child_code,
                     G1_QUANT AS quantity,
-                    1 AS level
+                    1        AS level
                 FROM SG1010 WITH (NOLOCK)
-                WHERE D_E_L_E_T_ = '' AND G1_COMP = ?
+                WHERE D_E_L_E_T_ = ''
+                AND G1_COMP = ?
 
                 UNION ALL
 
                 SELECT 
-                    c.G1_COD AS parentCode,
-                    c.G1_COMP AS childCode,
+                    c.G1_COD   AS parent_code,
+                    c.G1_COMP  AS child_code,
                     c.G1_QUANT AS quantity,
                     p.level + 1 AS level
                 FROM SG1010 c WITH (NOLOCK)
-                INNER JOIN RECURSIVE_PARENTS p ON p.parentCode = c.G1_COMP
-                WHERE c.D_E_L_E_T_ = '' AND p.level < ?
+                INNER JOIN recursive_parents p
+                    ON p.parent_code = c.G1_COMP
+                WHERE c.D_E_L_E_T_ = ''
+                AND p.level < ?
             )
             SELECT 
-                rp.parentCode,
-                pdesc.B1_DESC AS parentDesc,
-                pdesc.B1_TIPO AS parentType,
-                pdesc.B1_UM AS parentUM,
-                rp.childCode,
-                cdesc.B1_DESC AS childDesc,
-                cdesc.B1_TIPO AS childType,
-                cdesc.B1_UM AS childUM,
+                rp.parent_code,
+                parent.B1_DESC AS parent_description,
+                parent.B1_TIPO AS parent_type,
+                parent.B1_UM   AS parent_unit,
+
+                rp.child_code,
+                child.B1_DESC  AS child_description,
+                child.B1_TIPO  AS child_type,
+                child.B1_UM    AS child_unit,
+
                 rp.quantity,
                 rp.level
-            FROM RECURSIVE_PARENTS rp
-            LEFT JOIN SB1010 pdesc WITH (NOLOCK)
-                ON pdesc.B1_COD = rp.parentCode AND pdesc.D_E_L_E_T_ = ''
-            LEFT JOIN SB1010 cdesc WITH (NOLOCK)
-                ON cdesc.B1_COD = rp.childCode AND cdesc.D_E_L_E_T_ = ''
-            ORDER BY rp.level, rp.parentCode, rp.childCode;
+            FROM recursive_parents rp
+            LEFT JOIN SB1010 parent WITH (NOLOCK)
+                ON parent.B1_COD = rp.parent_code
+            AND parent.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 child WITH (NOLOCK)
+                ON child.B1_COD = rp.child_code
+            AND child.D_E_L_E_T_ = ''
+            ORDER BY
+                rp.level,
+                rp.parent_code,
+                rp.child_code;
         """
 
         rows = self.execute_query(data_query, (code, max_depth))
 
         # =====================================================
-        # 🔹 Monta estrutura hierárquica (filho → pais)
+        # Build hierarchical structure (child → parents)
         # =====================================================
-        items = {}
+        items: dict[str, dict] = {}
+
         for r in rows:
-            parent = {
-                "code": r["parentCode"],
-                "description": r["parentDesc"],
-                "type": r["parentType"],
-                "unit": r["parentUM"],
+            parent_node = {
+                "code": r["parent_code"],
+                "description": r["parent_description"],
+                "type": r["parent_type"],
+                "unit": r["parent_unit"],
                 "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
                 "parents": []
             }
 
-            child_code = r["childCode"]
+            child_code = r["child_code"]
+
             if child_code not in items:
                 items[child_code] = {
                     "code": child_code,
-                    "description": r["childDesc"],
-                    "type": r["childType"],
-                    "unit": r["childUM"],
+                    "description": r["child_description"],
+                    "type": r["child_type"],
+                    "unit": r["child_unit"],
                     "quantity": 1.0,
                     "parents": []
                 }
 
-            # adiciona o pai dentro do campo "parents"
-            items[child_code]["parents"].append(parent)
-            items[parent["code"]] = parent  # adiciona o pai ao índice global
+            # attach parent to child
+            items[child_code]["parents"].append(parent_node)
+
+            # index parent globally
+            items[parent_node["code"]] = parent_node
 
         # =====================================================
-        # 🔹 Produto raiz (filho consultado)
+        # Root product (queried child)
         # =====================================================
-        root = items.get(code, {
-            "code": code,
-            "description": None,
-            "type": None,
-            "unit": None,
-            "quantity": 1.0,
-            "parents": []
-        })
+        root = items.get(
+            code,
+            {
+                "code": code,
+                "description": None,
+                "type": None,
+                "unit": None,
+                "quantity": 1.0,
+                "parents": []
+            }
+        )
 
-        # Paginação somente no primeiro nível
-        root_parents = [items[p["code"]] for p in root["parents"]] if "parents" in root else []
+        # Pagination only at first parent level
+        root_parents = root.get("parents", [])
         offset = (page - 1) * page_size
         root["parents"] = root_parents[offset: offset + page_size]
 
@@ -680,8 +818,8 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": len(root_parents),
             "page": page,
-            "pageSize": page_size,
-            "totalPages": math.ceil(len(root_parents) / page_size),
+            "page_size": page_size,
+            "total_pages": math.ceil(len(root_parents) / page_size),
             "data": root
         }
 
@@ -712,14 +850,14 @@ class ProductRepository(BaseRepository):
 
         total = int(self.execute_one(count_sql, (code,))["total"] or 0)
 
-        sql = """ 
+        sql = """
             WITH LAST_PURCHASE AS (
                 SELECT
-                    C7.C7_PRODUTO,
-                    C7.C7_FORNECE,
-                    C7.C7_LOJA,
-                    C7.C7_PRECO,
-                    C7.C7_EMISSAO,
+                    C7.C7_PRODUTO   AS product_code,
+                    C7.C7_FORNECE   AS supplier_code,
+                    C7.C7_LOJA      AS supplier_store,
+                    C7.C7_PRECO     AS last_price,
+                    C7.C7_EMISSAO   AS last_price_date,
                     ROW_NUMBER() OVER (
                         PARTITION BY
                             C7.C7_PRODUTO,
@@ -736,13 +874,13 @@ class ProductRepository(BaseRepository):
 
             REAL_LEAD_TIME AS (
                 SELECT
-                    C7.C7_PRODUTO,
-                    C7.C7_FORNECE,
-                    C7.C7_LOJA,
-                    COUNT(*) AS amostra,
-                    AVG(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS lead_time_medio,
-                    MIN(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS lead_time_min,
-                    MAX(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS lead_time_max
+                    C7.C7_PRODUTO   AS product_code,
+                    C7.C7_FORNECE   AS supplier_code,
+                    C7.C7_LOJA      AS supplier_store,
+                    COUNT(*)        AS sample_size,
+                    AVG(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS avg_lead_time_days,
+                    MIN(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS min_lead_time_days,
+                    MAX(DATEDIFF(DAY, C7.C7_EMISSAO, SD1.D1_EMISSAO)) AS max_lead_time_days
                 FROM SC7010 C7
                 INNER JOIN SD1010 SD1
                     ON SD1.D1_PEDIDO  = C7.C7_NUM
@@ -760,31 +898,31 @@ class ProductRepository(BaseRepository):
             )
 
             SELECT
-                -- PRODUTO
-                SB1.B1_COD            AS produto,
-                SB1.B1_DESC           AS descricao_produto,
-                SB1.B1_UM             AS unidade,
+                -- Product
+                SB1.B1_COD      AS product_code,
+                SB1.B1_DESC     AS product_description,
+                SB1.B1_UM       AS unit,
 
-                -- FORNECEDOR
-                SA5.A5_FORNECE        AS fornecedor,
-                SA5.A5_LOJA           AS loja,
-                SA2.A2_NOME           AS fornecedor_nome,
+                -- Supplier
+                SA5.A5_FORNECE  AS supplier_code,
+                SA5.A5_LOJA     AS supplier_store,
+                SA2.A2_NOME     AS supplier_name,
 
-                -- CÓDIGOS DO PRODUTO NO FORNECEDOR
-                SA5.A5_CODPRF         AS part_number,
-                SA5.A5_CODPRCA        AS codigo_catalogo,
-                SA5.A5_CODBAR         AS codigo_barras,
+                -- Supplier product codes
+                SA5.A5_CODPRF   AS supplier_part_number,
+                SA5.A5_CODPRCA  AS catalog_code,
+                SA5.A5_CODBAR   AS barcode,
 
-                -- LEAD TIMES
-                SA5.A5_LEAD_T         AS lead_time_cadastrado,
-                RLT.lead_time_medio   AS lead_time_real_medio,
-                RLT.lead_time_min     AS lead_time_real_min,
-                RLT.lead_time_max     AS lead_time_real_max,
-                RLT.amostra           AS amostra_lead_time_real,
+                -- Lead times
+                SA5.A5_LEAD_T           AS registered_lead_time_days,
+                RLT.avg_lead_time_days  AS real_avg_lead_time_days,
+                RLT.min_lead_time_days  AS real_min_lead_time_days,
+                RLT.max_lead_time_days  AS real_max_lead_time_days,
+                RLT.sample_size         AS real_lead_time_sample_size,
 
-                -- PREÇO
-                LP.C7_PRECO           AS ultimo_preco,
-                LP.C7_EMISSAO         AS data_ultimo_preco
+                -- Last price
+                LP.last_price           AS last_price,
+                LP.last_price_date      AS last_price_date
 
             FROM SA5010 SA5
             INNER JOIN SB1010 SB1
@@ -797,24 +935,24 @@ class ProductRepository(BaseRepository):
             AND SA2.D_E_L_E_T_ = ''
 
             LEFT JOIN LAST_PURCHASE LP
-                ON LP.C7_PRODUTO = SA5.A5_PRODUTO
-            AND LP.C7_FORNECE = SA5.A5_FORNECE
-            AND LP.C7_LOJA = SA5.A5_LOJA
+                ON LP.product_code = SA5.A5_PRODUTO
+            AND LP.supplier_code = SA5.A5_FORNECE
+            AND LP.supplier_store = SA5.A5_LOJA
             AND LP.rn = 1
 
             LEFT JOIN REAL_LEAD_TIME RLT
-                ON RLT.C7_PRODUTO = SA5.A5_PRODUTO
-            AND RLT.C7_FORNECE = SA5.A5_FORNECE
-            AND RLT.C7_LOJA = SA5.A5_LOJA
+                ON RLT.product_code = SA5.A5_PRODUTO
+            AND RLT.supplier_code = SA5.A5_FORNECE
+            AND RLT.supplier_store = SA5.A5_LOJA
 
             WHERE
                 SA5.D_E_L_E_T_ = ''
                 AND SA5.A5_PRODUTO = ?
 
-            ORDER BY
-                SA5.A5_FORNECE
+            ORDER BY SA5.A5_FORNECE
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         """
+
         rows = self.execute_query(
             sql,
             (code, code, code, offset, page_size)
@@ -824,10 +962,11 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "data": rows
         }
+
 
     # -------------------------------
     # 🔹 INBOUND INVOICE ITEMS (Notas Fiscais de Entrada)
@@ -871,11 +1010,8 @@ class ProductRepository(BaseRepository):
             filters.append("SD1.D1_FILIAL = ?")
             params.append(branch)
 
-        where_extra = ""
-        if filters:
-            where_extra = " AND " + " AND ".join(filters)
+        where_extra = " AND " + " AND ".join(filters) if filters else ""
 
-        # COUNT
         count_sql = f"""
             SELECT COUNT(*) AS total
             FROM SD1010 SD1
@@ -885,29 +1021,28 @@ class ProductRepository(BaseRepository):
 
         total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
 
-        # DATA
         data_sql = f"""
             SELECT
-                SD1.D1_FILIAL        AS filial,
-                SD1.D1_DOC           AS nota,
-                SD1.D1_SERIE         AS serie,
-                SD1.D1_ITEM          AS item,
-                SD1.D1_EMISSAO       AS data_emissao,
+                SD1.D1_FILIAL    AS branch,
+                SD1.D1_DOC       AS invoice_number,
+                SD1.D1_SERIE     AS invoice_series,
+                SD1.D1_ITEM      AS item,
+                SD1.D1_EMISSAO   AS issue_date,
 
-                SD1.D1_COD           AS produto,
-                SB1.B1_DESC          AS descricao_produto,
-                SB1.B1_UM            AS unidade,
+                SD1.D1_COD       AS product_code,
+                SB1.B1_DESC      AS product_description,
+                SB1.B1_UM        AS unit,
 
-                SD1.D1_FORNECE       AS fornecedor,
-                SA2.A2_NOME          AS fornecedor_nome,
+                SD1.D1_FORNECE   AS supplier_code,
+                SA2.A2_NOME      AS supplier_name,
 
-                SD1.D1_QUANT         AS quantidade,
+                SD1.D1_QUANT     AS quantity,
                 CASE 
                     WHEN SD1.D1_QUANT <> 0 
                     THEN SD1.D1_TOTAL / SD1.D1_QUANT 
                     ELSE 0 
-                END                  AS preco_unitario,
-                SD1.D1_TOTAL         AS valor_total
+                END              AS unit_price,
+                SD1.D1_TOTAL     AS total_value
 
             FROM SD1010 SD1
             INNER JOIN SB1010 SB1
@@ -932,8 +1067,8 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "filters": {
                 "issue_date_start": issue_date_start,
                 "issue_date_end": issue_date_end,
@@ -964,7 +1099,6 @@ class ProductRepository(BaseRepository):
             raise ValueError("page_size must be between 1 and 500")
 
         offset = (page - 1) * page_size
-        log_info(f"Listando NF-es de saída do produto {code}")
 
         filters = []
         params = [code]
@@ -987,13 +1121,8 @@ class ProductRepository(BaseRepository):
             filters.append("SD2.D2_FILIAL = ?")
             params.append(branch)
 
-        where_extra = ""
-        if filters:
-            where_extra = " AND " + " AND ".join(filters)
+        where_extra = " AND " + " AND ".join(filters) if filters else ""
 
-        # -----------------------------
-        # COUNT
-        # -----------------------------
         count_sql = f"""
             SELECT COUNT(*) AS total
             FROM SD2010 SD2
@@ -1003,27 +1132,24 @@ class ProductRepository(BaseRepository):
 
         total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
 
-        # -----------------------------
-        # DATA
-        # -----------------------------
         data_sql = f"""
             SELECT
-                SD2.D2_FILIAL        AS filial,
-                SD2.D2_DOC           AS nota,
-                SD2.D2_SERIE         AS serie,
-                SD2.D2_ITEM          AS item,
-                SD2.D2_EMISSAO       AS data_emissao,
+                SD2.D2_FILIAL    AS branch,
+                SD2.D2_DOC       AS invoice_number,
+                SD2.D2_SERIE     AS invoice_series,
+                SD2.D2_ITEM      AS item,
+                SD2.D2_EMISSAO   AS issue_date,
 
-                SD2.D2_COD           AS produto,
-                SB1.B1_DESC          AS descricao_produto,
-                SB1.B1_UM            AS unidade,
+                SD2.D2_COD       AS product_code,
+                SB1.B1_DESC      AS product_description,
+                SB1.B1_UM        AS unit,
 
-                SD2.D2_CLIENTE       AS cliente,
-                SA1.A1_NOME          AS cliente_nome,
+                SD2.D2_CLIENTE   AS customer_code,
+                SA1.A1_NOME      AS customer_name,
 
-                SD2.D2_QUANT         AS quantidade,
-                SD2.D2_PRCVEN        AS preco_unitario,
-                (SD2.D2_QUANT * SD2.D2_PRCVEN) AS valor_total
+                SD2.D2_QUANT     AS quantity,
+                SD2.D2_PRCVEN    AS unit_price,
+                (SD2.D2_QUANT * SD2.D2_PRCVEN) AS total_value
 
             FROM SD2010 SD2
             INNER JOIN SB1010 SB1
@@ -1048,8 +1174,8 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "filters": {
                 "issue_date_start": issue_date_start,
                 "issue_date_end": issue_date_end,
@@ -1058,7 +1184,7 @@ class ProductRepository(BaseRepository):
             },
             "data": rows
         }
-
+    
 
     # -------------------------------
     # 🔹 STOCK + LOCALIZAÇÃO FÍSICA (SB2010 + SBZ010)
@@ -1096,7 +1222,7 @@ class ProductRepository(BaseRepository):
         where_clause = " AND ".join(filters)
 
         # -------------------------------
-        # 🔹 TOTAL (SB2010)
+        # TOTAL
         # -------------------------------
         count_sql = f"""
             SELECT COUNT(*) AS total
@@ -1104,28 +1230,26 @@ class ProductRepository(BaseRepository):
             WHERE {where_clause}
         """
 
-        total = int(
-            self.execute_one(count_sql, tuple(params))["total"] or 0
-        )
+        total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
 
         # -------------------------------
-        # 🔹 DADOS DE ESTOQUE + SBZ
+        # DATA
         # -------------------------------
         data_sql = f"""
             SELECT
-                SB2.B2_COD        AS produto,
-                SB2.B2_FILIAL     AS filial,
-                SB2.B2_LOCAL      AS armazem,
-                SB2.B2_QATU       AS saldo,
-                SB2.B2_QEMP       AS empenhado,
-                SB2.B2_RESERVA    AS reservado,
-                (SB2.B2_QATU - SB2.B2_QEMP - SB2.B2_RESERVA) AS disponivel,
+                SB2.B2_COD      AS product_code,
+                SB2.B2_FILIAL   AS branch,
+                SB2.B2_LOCAL    AS warehouse,
+                SB2.B2_QATU     AS current_quantity,
+                SB2.B2_QEMP     AS committed_quantity,
+                SB2.B2_RESERVA  AS reserved_quantity,
+                (SB2.B2_QATU - SB2.B2_QEMP - SB2.B2_RESERVA) AS available_quantity,
 
-                -- LOCALIZAÇÃO FÍSICA REAL (SBZ)
-                SBZ.BZ_MPLOCAL    AS localizacao_fisica,
-                SBZ.BZ_LOCPAD     AS armazem_padrao,
-                SBZ.BZ_CUSTO      AS centro_custo,
-                SBZ.BZ_GALPAO     AS galpao
+                -- Physical location (SBZ)
+                SBZ.BZ_MPLOCAL  AS physical_location,
+                SBZ.BZ_LOCPAD   AS default_warehouse,
+                SBZ.BZ_CUSTO    AS cost_center,
+                SBZ.BZ_GALPAO   AS warehouse_section
 
             FROM SB2010 SB2
             LEFT JOIN SBZ010 SBZ
@@ -1146,8 +1270,8 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "filters": {
                 "branch": branch,
                 "location": location
@@ -1159,71 +1283,6 @@ class ProductRepository(BaseRepository):
     # -------------------------------
     # 🔹 GUIDE (SG2010)
     # -------------------------------
-    def _build_guide_hierarchy(self, rows: list[dict]) -> list[dict]:
-        products = {}
-
-        for r in rows:
-            product_code = r["productCode"]
-
-            # -----------------------------
-            # Produto
-            # -----------------------------
-            if product_code not in products:
-                products[product_code] = {
-                    "productCode": product_code,
-                    "bomLevel": r["bomLevel"],
-                    "operations": {}
-                }
-
-            product = products[product_code]
-
-            # -----------------------------
-            # Operação
-            # -----------------------------
-            op_key = (r["routeCode"], r["operationCode"])
-
-            if op_key not in product["operations"]:
-                product["operations"][op_key] = {
-                    "routeCode": r["routeCode"],
-                    "operationCode": r["operationCode"],
-                    "description": r["operationDescription"],
-                    "workCenter": r["workCenter"],
-                    "resourceCode": r["resourceCode"],
-                    "setupHours": r["setupHours"],
-                    "standardTimeHours": r["standardTimeHours"],
-                    "operationType": r["operationType"],
-                    "mandatory": {
-                        "operation": r["mandatoryOperation"] == "1",
-                        "sequence": r["mandatorySequence"] == "1",
-                        "report": r["mandatoryReport"] == "1"
-                    },
-                    "components": []
-                }
-
-            operation = product["operations"][op_key]
-
-            # -----------------------------
-            # Componente (se existir)
-            # -----------------------------
-            if r.get("componentCode"):
-                operation["components"].append({
-                    "componentCode": r["componentCode"],
-                    "description": r["componentDescription"],
-                    "sequence": r["componentSequence"]
-                })
-
-        # -----------------------------
-        # Normaliza para listas
-        # -----------------------------
-        return [
-            {
-                "productCode": p["productCode"],
-                "bomLevel": p["bomLevel"],
-                "operations": list(p["operations"].values())
-            }
-            for p in products.values()
-        ]
-
     def list_guide(
         self,
         code: str,
@@ -1249,15 +1308,12 @@ class ProductRepository(BaseRepository):
 
         where_clause = " AND ".join(sg2_filters)
 
-        # ==============================================================
-        # COUNT
-        # ==============================================================
         count_sql = f"""
             WITH RECURSIVE_BOM AS (
                 SELECT
-                    G1_COD  AS parentCode,
-                    G1_COMP AS productCode,
-                    1       AS bomLevel
+                    G1_COD  AS parent_code,
+                    G1_COMP AS product_code,
+                    1       AS bom_level
                 FROM SG1010
                 WHERE D_E_L_E_T_ = ''
                 AND G1_COD = ?
@@ -1267,22 +1323,22 @@ class ProductRepository(BaseRepository):
                 SELECT
                     C.G1_COD,
                     C.G1_COMP,
-                    B.bomLevel + 1
+                    B.bom_level + 1
                 FROM SG1010 C
                 INNER JOIN RECURSIVE_BOM B
-                    ON B.productCode = C.G1_COD
+                    ON B.product_code = C.G1_COD
                 WHERE C.D_E_L_E_T_ = ''
-                AND B.bomLevel < ?
+                AND B.bom_level < ?
             ),
             CODES AS (
-                SELECT ? AS productCode, 0 AS bomLevel
+                SELECT ? AS product_code, 0 AS bom_level
                 UNION
-                SELECT DISTINCT productCode, bomLevel FROM RECURSIVE_BOM
+                SELECT DISTINCT product_code, bom_level FROM RECURSIVE_BOM
             )
             SELECT COUNT(*) AS total
             FROM SG2010 SG2
             INNER JOIN CODES
-                ON CODES.productCode = SG2.G2_PRODUTO
+                ON CODES.product_code = SG2.G2_PRODUTO
             WHERE {where_clause}
         """
 
@@ -1293,15 +1349,12 @@ class ProductRepository(BaseRepository):
             )["total"] or 0
         )
 
-        # ==============================================================
-        # DATA
-        # ==============================================================
         data_sql = f"""
             WITH RECURSIVE_BOM AS (
                 SELECT
-                    G1_COD  AS parentCode,
-                    G1_COMP AS productCode,
-                    1       AS bomLevel
+                    G1_COD  AS parent_code,
+                    G1_COMP AS product_code,
+                    1       AS bom_level
                 FROM SG1010
                 WHERE D_E_L_E_T_ = ''
                 AND G1_COD = ?
@@ -1311,45 +1364,45 @@ class ProductRepository(BaseRepository):
                 SELECT
                     C.G1_COD,
                     C.G1_COMP,
-                    B.bomLevel + 1
+                    B.bom_level + 1
                 FROM SG1010 C
                 INNER JOIN RECURSIVE_BOM B
-                    ON B.productCode = C.G1_COD
+                    ON B.product_code = C.G1_COD
                 WHERE C.D_E_L_E_T_ = ''
-                AND B.bomLevel < ?
+                AND B.bom_level < ?
             ),
             CODES AS (
-                SELECT ? AS productCode, 0 AS bomLevel
+                SELECT ? AS product_code, 0 AS bom_level
                 UNION ALL
-                SELECT DISTINCT productCode, bomLevel FROM RECURSIVE_BOM
+                SELECT DISTINCT product_code, bom_level FROM RECURSIVE_BOM
             )
             SELECT
-                SG2.G2_FILIAL      AS branch,
-                SG2.G2_CODIGO      AS routeCode,
-                SG2.G2_PRODUTO     AS productCode,
-                SG2.G2_OPERAC      AS operationCode,
-                SG2.G2_DESCRI      AS operationDescription,
+                SG2.G2_FILIAL  AS branch,
+                SG2.G2_CODIGO  AS route_code,
+                SG2.G2_PRODUTO AS product_code,
+                SG2.G2_OPERAC  AS operation_code,
+                SG2.G2_DESCRI  AS operation_description,
 
-                SG2.G2_RECURSO     AS resourceCode,
-                SG2.G2_CTRAB       AS workCenter,
+                SG2.G2_RECURSO AS resource_code,
+                SG2.G2_CTRAB   AS work_center,
 
-                SG2.G2_SETUP       AS setupHours,
-                SG2.G2_TEMPAD      AS standardTimeHours,
+                SG2.G2_SETUP   AS setup_hours,
+                SG2.G2_TEMPAD  AS standard_time_hours,
 
-                SG2.G2_TPOPER      AS operationType,
-                SG2.G2_OPE_OBR     AS mandatoryOperation,
-                SG2.G2_SEQ_OBR     AS mandatorySequence,
-                SG2.G2_LAU_OBR     AS mandatoryReport,
+                SG2.G2_TPOPER  AS operation_type,
+                SG2.G2_OPE_OBR AS mandatory_operation,
+                SG2.G2_SEQ_OBR AS mandatory_sequence,
+                SG2.G2_LAU_OBR AS mandatory_report,
 
-                SGF.GF_COMP        AS componentCode,
-                SB1.B1_DESC        AS componentDescription,
-                SGF.GF_TRT         AS componentSequence,
+                SGF.GF_COMP    AS component_code,
+                SB1.B1_DESC    AS component_description,
+                SGF.GF_TRT     AS component_sequence,
 
-                CODES.bomLevel     AS bomLevel
+                CODES.bom_level AS bom_level
 
             FROM SG2010 SG2
             INNER JOIN CODES
-                ON CODES.productCode = SG2.G2_PRODUTO
+                ON CODES.product_code = SG2.G2_PRODUTO
             LEFT JOIN SGF010 SGF
                 ON SGF.GF_FILIAL  = SG2.G2_FILIAL
             AND SGF.GF_PRODUTO = SG2.G2_PRODUTO
@@ -1361,7 +1414,7 @@ class ProductRepository(BaseRepository):
             AND SB1.D_E_L_E_T_ = ''
             WHERE {where_clause}
             ORDER BY
-                CODES.bomLevel,
+                CODES.bom_level,
                 SG2.G2_PRODUTO,
                 SG2.G2_OPERAC,
                 SGF.GF_TRT
@@ -1379,15 +1432,14 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "filters": {
                 "branch": branch,
-                "maxDepth": max_depth
+                "max_depth": max_depth
             },
             "data": hierarchy
         }
-
 
 
     # -------------------------------
@@ -1399,17 +1451,17 @@ class ProductRepository(BaseRepository):
         max_depth: int = 10
     ) -> dict:
         """
-        Retorna a DEFINIÇÃO de inspeção (QP6, QP7, QP8) de um produto
-        e de seus componentes conforme a SG1010.
+        Returns the INSPECTION DEFINITION (QP6, QP7, QP8) of a product
+        and its components according to SG1010.
 
-        ⚠️ NÃO retorna:
-            - histórico
-            - resultados
-            - não conformidades
+        ⚠️ DOES NOT return:
+            - inspection history
+            - results
+            - non-conformities
         """
 
         # -------------------------------
-        # Validações
+        # Validations
         # -------------------------------
         if not code:
             raise ValueError("code must be provided")
@@ -1418,7 +1470,7 @@ class ProductRepository(BaseRepository):
             raise ValueError("max_depth must be between 1 and 20")
 
         # ============================================================
-        # SQL — definição de inspeção com revisão controlada
+        # SQL — inspection definition with controlled revision
         # ============================================================
         sql = """
         DECLARE
@@ -1426,13 +1478,13 @@ class ProductRepository(BaseRepository):
             @max_depth INT = ?;
 
         -- ============================================================
-        -- Estrutura de produto (SG1010)
+        -- Product structure (SG1010)
         -- ============================================================
-        WITH BOM_RECURSIVE AS (
+        WITH bom_recursive AS (
             SELECT
                 G1.G1_COD  AS root_code,
                 G1.G1_COMP AS product_code,
-                1          AS level
+                1          AS bom_level
             FROM SG1010 G1 WITH (NOLOCK)
             WHERE G1.D_E_L_E_T_ = ''
             AND G1.G1_COD = @product_code
@@ -1442,24 +1494,24 @@ class ProductRepository(BaseRepository):
             SELECT
                 B.root_code,
                 G1.G1_COMP,
-                B.level + 1
+                B.bom_level + 1
             FROM SG1010 G1 WITH (NOLOCK)
-            INNER JOIN BOM_RECURSIVE B
+            INNER JOIN bom_recursive B
                 ON B.product_code = G1.G1_COD
             WHERE G1.D_E_L_E_T_ = ''
-            AND B.level < @max_depth
+            AND B.bom_level < @max_depth
         ),
 
-        PRODUCT_SCOPE AS (
-            SELECT @product_code AS product_code, 0 AS level
+        product_scope AS (
+            SELECT @product_code AS product_code, 0 AS bom_level
             UNION
-            SELECT product_code, level FROM BOM_RECURSIVE
+            SELECT product_code, bom_level FROM bom_recursive
         ),
 
         -- ============================================================
-        -- Revisão ATIVA por produto (QP6)
+        -- Active revision per product (QP6)
         -- ============================================================
-        ACTIVE_QP6 AS (
+        active_qp6 AS (
             SELECT
                 QP6_PRODUT AS product_code,
                 MAX(QP6_REVI) AS revision
@@ -1469,20 +1521,20 @@ class ProductRepository(BaseRepository):
         ),
 
         -- ============================================================
-        -- Apenas produtos com definição de inspeção válida
+        -- Products with valid inspection definition
         -- ============================================================
-        INSPECTION_SCOPE AS (
+        inspection_scope AS (
             SELECT
-                P.product_code AS productCode,
-                P.level,
-                R.revision
-            FROM PRODUCT_SCOPE P
-            INNER JOIN ACTIVE_QP6 R
+                P.product_code AS product_code,
+                P.bom_level    AS bom_level,
+                R.revision     AS revision
+            FROM product_scope P
+            INNER JOIN active_qp6 R
                 ON R.product_code = P.product_code
         )
 
         -- ============================================================
-        -- JSON final
+        -- Final JSON
         -- ============================================================
         SELECT
         (
@@ -1490,112 +1542,114 @@ class ProductRepository(BaseRepository):
                 COUNT(*) AS total,
                 (
                     SELECT
-                        I.productCode,
-                        I.level,
+                        I.product_code,
+                        I.bom_level,
 
                         CASE
                             WHEN EXISTS (
-                                SELECT 1 FROM QP7010
+                                SELECT 1
+                                FROM QP7010
                                 WHERE D_E_L_E_T_ = ''
-                                AND QP7_PRODUT = I.productCode
+                                AND QP7_PRODUT = I.product_code
                                 AND QP7_REVI = I.revision
                             )
                             OR EXISTS (
-                                SELECT 1 FROM QP8010
+                                SELECT 1
+                                FROM QP8010
                                 WHERE D_E_L_E_T_ = ''
-                                AND QP8_PRODUT = I.productCode
+                                AND QP8_PRODUT = I.product_code
                                 AND QP8_REVI = I.revision
                             )
                             THEN CAST(1 AS BIT)
                             ELSE CAST(0 AS BIT)
-                        END AS hasInspection,
+                        END AS has_inspection,
 
                         -- =========================
-                        -- QP6 — Cabeçalho
+                        -- QP6 — Inspection header
                         -- =========================
                         (
                             SELECT
-                                QP6.QP6_PRODUT AS productCode,
-                                QP6.QP6_REVI   AS revision,
-                                QP6.QP6_REVINV AS reviewInvalid,
-                                QP6.QP6_DESCPO AS description,
-                                QP6.QP6_DTCAD  AS createdAt,
-                                QP6.QP6_DTINI  AS startDate,
-                                QP6.QP6_CADR   AS createdBy,
-                                QP6.QP6_PTOLER AS tolerancePercent,
-                                QP6.QP6_TIPO   AS inspectionType,
-                                QP6.QP6_DOCOBR AS requiresDocument,
-                                QP6.QP6_SITPRD AS productStatus,
-                                QP6.QP6_DESSTP AS statusDescription,
-                                QP6.QP6_UNMED1 AS unit
+                                QP6.QP6_PRODUT  AS product_code,
+                                QP6.QP6_REVI    AS revision,
+                                QP6.QP6_REVINV  AS review_invalid,
+                                QP6.QP6_DESCPO  AS description,
+                                QP6.QP6_DTCAD   AS created_at,
+                                QP6.QP6_DTINI   AS start_date,
+                                QP6.QP6_CADR    AS created_by,
+                                QP6.QP6_PTOLER  AS tolerance_percent,
+                                QP6.QP6_TIPO    AS inspection_type,
+                                QP6.QP6_DOCOBR  AS requires_document,
+                                QP6.QP6_SITPRD  AS product_status,
+                                QP6.QP6_DESSTP  AS status_description,
+                                QP6.QP6_UNMED1  AS unit
                             FROM QP6010 QP6 WITH (NOLOCK)
                             WHERE QP6.D_E_L_E_T_ = ''
-                            AND QP6.QP6_PRODUT = I.productCode
+                            AND QP6.QP6_PRODUT = I.product_code
                             AND QP6.QP6_REVI = I.revision
                             FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
                         ) AS qp6,
 
                         -- =========================
-                        -- QP7 — Ensaios mensuráveis
+                        -- QP7 — Measurable tests
                         -- =========================
                         (
                             SELECT
-                                QP7.QP7_PRODUT AS productCode,
-                                QP7.QP7_REVI   AS revision,
-                                QP7.QP7_ENSAIO AS testCode,
-                                QP7.QP7_LABOR  AS labor,
-                                QP7.QP7_SEQLAB AS sequence,
-                                QP7.QP7_UNIMED AS unit,
-                                QP7.QP7_MINMAX AS minMaxType,
-                                QP7.QP7_NOMINA AS nominalValue,
-                                QP7.QP7_LIE    AS lowerSpecLimit,
-                                QP7.QP7_LSE    AS upperSpecLimit,
-                                QP7.QP7_LIC    AS lowerControlLimit,
-                                QP7.QP7_LSC    AS upperControlLimit,
-                                QP7.QP7_CODREC AS reactionCode,
-                                QP7.QP7_OPERAC AS operation,
-                                QP7.QP7_ENSOBR AS mandatory,
-                                QP7.QP7_CERTIF AS certification
+                                QP7.QP7_PRODUT  AS product_code,
+                                QP7.QP7_REVI    AS revision,
+                                QP7.QP7_ENSAIO  AS test_code,
+                                QP7.QP7_LABOR   AS labor,
+                                QP7.QP7_SEQLAB  AS sequence,
+                                QP7.QP7_UNIMED  AS unit,
+                                QP7.QP7_MINMAX  AS min_max_type,
+                                QP7.QP7_NOMINA  AS nominal_value,
+                                QP7.QP7_LIE     AS lower_spec_limit,
+                                QP7.QP7_LSE     AS upper_spec_limit,
+                                QP7.QP7_LIC     AS lower_control_limit,
+                                QP7.QP7_LSC     AS upper_control_limit,
+                                QP7.QP7_CODREC  AS reaction_code,
+                                QP7.QP7_OPERAC  AS operation,
+                                QP7.QP7_ENSOBR  AS mandatory,
+                                QP7.QP7_CERTIF  AS certification
                             FROM QP7010 QP7 WITH (NOLOCK)
                             WHERE QP7.D_E_L_E_T_ = ''
-                            AND QP7.QP7_PRODUT = I.productCode
+                            AND QP7.QP7_PRODUT = I.product_code
                             AND QP7.QP7_REVI = I.revision
                             FOR JSON PATH
                         ) AS qp7,
 
                         -- =========================
-                        -- QP8 — Ensaios textuais
+                        -- QP8 — Textual tests
                         -- =========================
                         (
                             SELECT
-                                QP8.QP8_PRODUT AS productCode,
-                                QP8.QP8_REVI   AS revision,
-                                QP8.QP8_ENSAIO AS testCode,
-                                QP8.QP8_LABOR  AS labor,
-                                QP8.QP8_SEQLAB AS sequence,
-                                QP8.QP8_TEXTO  AS text,
-                                QP8.QP8_CODREC AS reactionCode,
-                                QP8.QP8_OPERAC AS operation,
-                                QP8.QP8_ENSOBR AS mandatory,
-                                QP8.QP8_CERTIF AS certification
+                                QP8.QP8_PRODUT  AS product_code,
+                                QP8.QP8_REVI    AS revision,
+                                QP8.QP8_ENSAIO  AS test_code,
+                                QP8.QP8_LABOR   AS labor,
+                                QP8.QP8_SEQLAB  AS sequence,
+                                QP8.QP8_TEXTO   AS text,
+                                QP8.QP8_CODREC  AS reaction_code,
+                                QP8.QP8_OPERAC  AS operation,
+                                QP8.QP8_ENSOBR  AS mandatory,
+                                QP8.QP8_CERTIF  AS certification
                             FROM QP8010 QP8 WITH (NOLOCK)
                             WHERE QP8.D_E_L_E_T_ = ''
-                            AND QP8.QP8_PRODUT = I.productCode
+                            AND QP8.QP8_PRODUT = I.product_code
                             AND QP8.QP8_REVI = I.revision
                             FOR JSON PATH
                         ) AS qp8
 
-                    FROM INSPECTION_SCOPE I
-                    ORDER BY I.level, I.productCode
+                    FROM inspection_scope I
+                    ORDER BY I.bom_level, I.product_code
                     FOR JSON PATH
                 ) AS data
-            FROM INSPECTION_SCOPE
+            FROM inspection_scope
             FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
         ) AS data;
         """
 
         # ============================================================
-        # Execução
+        # Execution
         # ============================================================
         params = (code, max_depth)
         result = self.execute_json(sql, params)
@@ -1782,8 +1836,8 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "data": data_json
         }
     
@@ -1809,14 +1863,14 @@ class ProductRepository(BaseRepository):
         total = int(self.execute_one(count_sql, (code,))["total"] or 0)
 
         sql = """
-            WITH LAST_SALE AS (
+            WITH last_sale AS (
                 SELECT
-                    SD2.D2_COD        AS productCode,
-                    SD2.D2_CLIENTE   AS customerCode,
-                    SD2.D2_LOJA      AS store,
-                    MAX(SD2.D2_EMISSAO) AS lastSaleDate,
-                    SUM(SD2.D2_QUANT)   AS totalQuantity,
-                    AVG(SD2.D2_PRCVEN)  AS averagePrice
+                    SD2.D2_COD          AS product_code,
+                    SD2.D2_CLIENTE     AS customer_code,
+                    SD2.D2_LOJA        AS store,
+                    MAX(SD2.D2_EMISSAO) AS last_sale_date,
+                    SUM(SD2.D2_QUANT)   AS total_quantity,
+                    AVG(SD2.D2_PRCVEN)  AS average_price
                 FROM SD2010 SD2
                 WHERE SD2.D_E_L_E_T_ = ''
                 AND SD2.D2_COD = ?
@@ -1828,28 +1882,28 @@ class ProductRepository(BaseRepository):
 
             SELECT
                 -- Product
-                SB1.B1_COD      AS productCode,
-                SB1.B1_DESC     AS productDescription,
+                SB1.B1_COD      AS product_code,
+                SB1.B1_DESC     AS product_description,
                 SB1.B1_UM       AS unit,
 
                 -- Customer
-                SA1.A1_COD      AS customerCode,
+                SA1.A1_COD      AS customer_code,
                 SA1.A1_LOJA     AS store,
-                SA1.A1_NOME     AS customerName,
+                SA1.A1_NOME     AS customer_name,
                 SA1.A1_MSBLQL   AS blocked,
 
                 -- Product x Customer
-                SA7.A7_CODCLI   AS customerProductCode,
-                SA7.A7_DESCCLI  AS customerProductDescription,
+                SA7.A7_CODCLI   AS customer_product_code,
+                SA7.A7_DESCCLI  AS customer_product_description,
 
                 -- Registered price
-                SA7.A7_PRECO01  AS registeredPrice,
-                SA7.A7_DTREF01  AS registeredPriceDate,
+                SA7.A7_PRECO01  AS registered_price,
+                SA7.A7_DTREF01  AS registered_price_date,
 
                 -- Sales info
-                LS.averagePrice AS lastSalePrice,
-                LS.lastSaleDate,
-                LS.totalQuantity
+                LS.average_price   AS last_sale_price,
+                LS.last_sale_date,
+                LS.total_quantity
 
             FROM SA7010 SA7
             INNER JOIN SA1010 SA1
@@ -1861,9 +1915,9 @@ class ProductRepository(BaseRepository):
                 ON SB1.B1_COD = SA7.A7_PRODUTO
             AND SB1.D_E_L_E_T_ = ''
 
-            LEFT JOIN LAST_SALE LS
-                ON LS.productCode = SA7.A7_PRODUTO
-            AND LS.customerCode = SA7.A7_CLIENTE
+            LEFT JOIN last_sale LS
+                ON LS.product_code = SA7.A7_PRODUTO
+            AND LS.customer_code = SA7.A7_CLIENTE
             AND LS.store = SA7.A7_LOJA
 
             WHERE
@@ -1880,8 +1934,8 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "data": rows
         }
 
@@ -1908,15 +1962,15 @@ class ProductRepository(BaseRepository):
 
         sql = """
             SELECT
-                C7.C7_NUM        AS orderNumber,
+                C7.C7_NUM        AS order_number,
                 C7.C7_FILIAL     AS branch,
-                C7.C7_EMISSAO    AS issueDate,
-                C7.C7_FORNECE    AS supplierCode,
+                C7.C7_EMISSAO    AS issue_date,
+                C7.C7_FORNECE    AS supplier_code,
                 C7.C7_LOJA       AS store,
-                SA2.A2_NOME      AS supplierName,
-                C7.C7_PRODUTO    AS productCode,
-                SUM(C7.C7_QUANT) AS orderedQuantity,
-                AVG(C7.C7_PRECO) AS unitPrice
+                SA2.A2_NOME      AS supplier_name,
+                C7.C7_PRODUTO    AS product_code,
+                SUM(C7.C7_QUANT) AS ordered_quantity,
+                AVG(C7.C7_PRECO) AS unit_price
             FROM SC7010 C7
             LEFT JOIN SA2010 SA2
                 ON SA2.A2_COD = C7.C7_FORNECE
@@ -1943,10 +1997,11 @@ class ProductRepository(BaseRepository):
             "success": True,
             "total": total,
             "page": page,
-            "pageSize": page_size,
-            "totalPages": (total + page_size - 1) // page_size,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
             "data": rows
         }
+
 
 
     # -------------------------------
@@ -1954,11 +2009,15 @@ class ProductRepository(BaseRepository):
     # -------------------------------
     def get_sales_summary(self, code: str) -> dict:
         """
-        Resumo consolidado de vendas realizadas.
+        Consolidated sales summary.
         Base: SD2010
         """
+
         product_sql = """
-            SELECT B1_COD, B1_DESC, B1_UM
+            SELECT
+                B1_COD  AS product_code,
+                B1_DESC AS product_description,
+                B1_UM   AS unit
             FROM SB1010
             WHERE D_E_L_E_T_ = ''
             AND B1_COD = ?
@@ -1967,12 +2026,12 @@ class ProductRepository(BaseRepository):
 
         sales_sql = """
             SELECT
-                SUM(D2_QUANT)          AS totalQuantity,
-                SUM(D2_TOTAL)          AS totalValue,
-                AVG(D2_PRCVEN)         AS averagePrice,
+                SUM(D2_QUANT)          AS total_quantity,
+                SUM(D2_TOTAL)          AS total_value,
+                AVG(D2_PRCVEN)         AS average_price,
                 COUNT(DISTINCT D2_DOC) AS documents,
-                MIN(D2_EMISSAO)        AS firstSale,
-                MAX(D2_EMISSAO)        AS lastSale
+                MIN(D2_EMISSAO)        AS first_sale_date,
+                MAX(D2_EMISSAO)        AS last_sale_date
             FROM SD2010
             WHERE D_E_L_E_T_ = ''
             AND D2_COD = ?
@@ -1984,31 +2043,31 @@ class ProductRepository(BaseRepository):
             "success": True,
             "product": {
                 "code": code,
-                "description": product["B1_DESC"] if product else None,
-                "unit": product["B1_UM"] if product else None
+                "description": product["product_description"] if product else None,
+                "unit": product["unit"] if product else None
             },
             "summary": {
-                "totalQuantity": float(summary["totalQuantity"] or 0),
-                "totalValue": float(summary["totalValue"] or 0),
-                "averagePrice": float(summary["averagePrice"] or 0),
+                "total_quantity": float(summary["total_quantity"] or 0),
+                "total_value": float(summary["total_value"] or 0),
+                "average_price": float(summary["average_price"] or 0),
                 "documents": int(summary["documents"] or 0),
-                "firstSale": summary["firstSale"],
-                "lastSale": summary["lastSale"]
+                "first_sale_date": summary["first_sale_date"],
+                "last_sale_date": summary["last_sale_date"]
             }
         }
-    
+
 
     def get_sales_open_orders(self, code: str) -> dict:
         """
-        Carteira de pedidos de venda (itens em aberto).
+        Open sales orders (open quantities).
         Base: SC6010
         """
 
         sql = """
             SELECT
-                SUM(C6_QTDVEN)                AS openQuantity,
-                SUM(C6_QTDVEN * C6_PRCVEN)    AS openValue,
-                COUNT(DISTINCT C6_NUM)        AS orders
+                SUM(C6_QTDVEN)                     AS open_quantity,
+                SUM(C6_QTDVEN * C6_PRCVEN)         AS open_value,
+                COUNT(DISTINCT C6_NUM)             AS orders
             FROM SC6010
             WHERE D_E_L_E_T_ = ''
             AND C6_PRODUTO = ?
@@ -2019,9 +2078,9 @@ class ProductRepository(BaseRepository):
 
         return {
             "success": True,
-            "openOrders": {
-                "quantity": float(row["openQuantity"] or 0),
-                "value": float(row["openValue"] or 0),
+            "open_orders": {
+                "quantity": float(row["open_quantity"] or 0),
+                "value": float(row["open_value"] or 0),
                 "orders": int(row["orders"] or 0)
             }
         }
@@ -2029,16 +2088,16 @@ class ProductRepository(BaseRepository):
 
     def get_sales_billing(self, code: str) -> dict:
         """
-        Resumo de faturamento financeiro por produto.
-        Base: SD2010 (itens faturados)
+        Financial billing summary per product.
+        Base: SD2010
         """
 
         sql = """
             SELECT
-                SUM(D2_TOTAL)          AS billedValue,
+                SUM(D2_TOTAL)          AS billed_value,
                 COUNT(DISTINCT D2_DOC) AS documents,
-                MIN(D2_EMISSAO)        AS firstBilling,
-                MAX(D2_EMISSAO)        AS lastBilling
+                MIN(D2_EMISSAO)        AS first_billing_date,
+                MAX(D2_EMISSAO)        AS last_billing_date
             FROM SD2010
             WHERE D_E_L_E_T_ = ''
             AND D2_COD = ?
@@ -2049,29 +2108,29 @@ class ProductRepository(BaseRepository):
         return {
             "success": True,
             "billing": {
-                "value": float(row["billedValue"] or 0),
+                "value": float(row["billed_value"] or 0),
                 "documents": int(row["documents"] or 0),
-                "firstBilling": row["firstBilling"],
-                "lastBilling": row["lastBilling"]
+                "first_billing_date": row["first_billing_date"],
+                "last_billing_date": row["last_billing_date"]
             }
         }
-    
+
 
     def get_product_pricing(self, code: str) -> dict:
         """
-        Retorna os preços comerciais do produto.
+        Returns product commercial pricing.
 
-        Bases REAIS:
-        - DA1010 → preços por produto
-        - DA0010 → descrição da tabela de preço
-        - SB1010 → descrição e unidade do produto
+        Real bases:
+        - DA1010 → product pricing
+        - DA0010 → price table description
+        - SB1010 → product description and unit
         """
 
-        # -------------------------------------------------
-        # Produto
-        # -------------------------------------------------
         product_sql = """
-            SELECT B1_COD, B1_DESC, B1_UM
+            SELECT
+                B1_COD  AS product_code,
+                B1_DESC AS product_description,
+                B1_UM   AS unit
             FROM SB1010
             WHERE D_E_L_E_T_ = ''
             AND B1_COD = ?
@@ -2079,21 +2138,28 @@ class ProductRepository(BaseRepository):
         product = self.execute_one(product_sql, (code,))
 
         if not product:
-            return {"success": False, "message": f"Product {code} not found"}
+            return {
+                "success": False,
+                "message": f"Product {code} not found"
+            }
 
         pricing_sql = """
             SELECT
-                DA1.DA1_CODTAB AS tableCode,
-                DA0.DA0_DESCRI AS tableDescription,
-                DA1.DA1_PRCVEN AS salePrice,
-                DA1.DA1_PRCMAX AS maxPrice,
-                DA1.DA1_VLRDES AS discountValue,
-                DA1.DA1_PERDES AS discountPercent,
-                DA1.DA1_QTDLOT AS lotQuantity,
+                DA1.DA1_CODTAB AS table_code,
+                DA0.DA0_DESCRI AS table_description,
+
+                DA1.DA1_PRCVEN AS sale_price,
+                DA1.DA1_PRCMAX AS max_price,
+
+                DA1.DA1_VLRDES AS discount_value,
+                DA1.DA1_PERDES AS discount_percent,
+
+                DA1.DA1_QTDLOT AS lot_quantity,
                 DA1.DA1_ESTADO AS state,
-                DA1.DA1_TPOPER AS operationType,
+                DA1.DA1_TPOPER AS operation_type,
                 DA1.DA1_MOEDA  AS currency,
-                DA1.DA1_DATVIG AS validFrom,
+
+                DA1.DA1_DATVIG AS valid_from,
                 DA1.DA1_ATIVO  AS active
             FROM DA1010 DA1
             INNER JOIN DA0010 DA0
@@ -2110,9 +2176,9 @@ class ProductRepository(BaseRepository):
         return {
             "success": True,
             "product": {
-                "code": product["B1_COD"],
-                "description": product["B1_DESC"],
-                "unit": product["B1_UM"]
+                "code": product["product_code"],
+                "description": product["product_description"],
+                "unit": product["unit"]
             },
             "prices": rows
         }

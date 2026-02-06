@@ -29,7 +29,7 @@ def search_products_by_description_route(
         result = search_products_by_description(description, page, page_size)
         return success_response(
             data=result,
-            message=f"Busca por descrição realizada com sucesso (página {page}/{result['totalPages']})."
+            message=f"Busca por descrição realizada com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro na busca pela descrição: {e}")
@@ -65,7 +65,7 @@ def structure(
         result = get_structure(code, max_depth, page, page_size)
         return success_response(
             data=result,
-            message=f"Estrutura do produto {code} retornada com sucesso (página {page}/{result['totalPages']})."
+            message=f"Estrutura do produto {code} retornada com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar estrutura do produto {code}: {e}")
@@ -139,7 +139,7 @@ def parents(
         result = get_parents(code, max_depth, page, page_size)
         return success_response(
             data=result,
-            message=f"Produtos pai de {code} retornados com sucesso (página {page}/{result['totalPages']})."
+            message=f"Produtos pai de {code} retornados com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar pais do item {code}: {e}")
@@ -159,7 +159,7 @@ def suppliers(
         result = get_suppliers(code, page, page_size)
         return success_response(
             data=result,
-            message=f"Fornecedores de {code} retornados com sucesso (página {page}/{result['totalPages']})."
+            message=f"Fornecedores de {code} retornados com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar fornecedores do item {code}: {e}")
@@ -183,7 +183,7 @@ def inbound_invoice_items(
         result = get_inbound_invoice_items(code, page, page_size, issue_date_start, issue_date_end, supplier, branch)
         return success_response(
             data=result,
-            message=f"Inbound invoices for {code} fetched successfully (page {page}/{result['totalPages']})."
+            message=f"Inbound invoices for {code} fetched successfully (page {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar NF-es de entrada para {code}: {e}")
@@ -207,7 +207,7 @@ def outbound_invoice_items(
         result = get_outbound_invoice_items(code, page, page_size, issue_date_start, issue_date_end, customer, branch)
         return success_response(
             data=result,
-            message=f"Outbound invoices for {code} fetched successfully (page {page}/{result['totalPages']})."
+            message=f"Outbound invoices for {code} fetched successfully (page {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar NF-es de saída para {code}: {e}")
@@ -227,7 +227,7 @@ def purchases(
         result = get_purchases(code, page, page_size)
         return success_response(
             data=result,
-            message=f"Histórico de compras de {code} retornado com sucesso (página {page}/{result['totalPages']})."
+            message=f"Histórico de compras de {code} retornado com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar compras do item {code}: {e}")
@@ -331,7 +331,7 @@ def stock(
         result = get_stock(code, page, page_size, branch, location)
         return success_response(
             data=result,
-            message=f"Estoque de {code} retornado com sucesso (página {page}/{result['totalPages']})."
+            message=f"Estoque de {code} retornado com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar estoque do item {code}: {e}")
@@ -354,7 +354,7 @@ def guide(
         result = get_guide(code, page, page_size, branch, max_depth)
         return success_response(
             data=result,
-            message=f"Roteiro de {code} retornado com sucesso (página {page}/{result['totalPages']})."
+            message=f"Roteiro de {code} retornado com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar roteiro do item {code}: {e}")
@@ -426,7 +426,7 @@ def customers(
         result = get_customers(code, page, page_size)
         return success_response(
             data=result,
-            message=f"Clientes vinculados ao produto {code} retornados com sucesso (página {page}/{result['totalPages']})."
+            message=f"Clientes vinculados ao produto {code} retornados com sucesso (página {page}/{result['total_pages']})."
         )
     except Exception as e:
         log_error(f"Erro ao consultar clientes do item {code}: {e}")
