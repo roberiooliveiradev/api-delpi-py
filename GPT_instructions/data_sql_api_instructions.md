@@ -2043,3 +2043,252 @@ ORDER BY
     P.B1_DESC,
     P.B1_COD;
 ```
+
+---
+
+### 16. Usuário: **"Itens de pedidos de venda em aberto — aberto físico × comercial × faturável (com insights)."**
+
+#### 🎯 Objetivo
+
+Identificar e analisar a **carteira de pedidos de venda**
+no Protheus, classificando cada item conforme o **tipo real de abertura**
+(**físico, comercial ou faturável**), garantindo que:
+
+- apenas **itens de pedido ativos** sejam considerados;
+- somente **itens com saldo em aberto** (quantidade vendida maior que entregue)
+  sejam retornados;
+- **bloqueios no item** sejam respeitados;
+- os pedidos sejam classificados de forma **determinística e auditável**;
+- seja possível **identificar pedidos bloqueados por falta de liberação**;
+- sejam gerados **insights operacionais e financeiros**, como:
+  - valor financeiro exposto;
+  - status logístico do pedido (alinhado ao Power BI);
+  - identificação de pedidos bloqueados por liberação.
+
+O objetivo é **eliminar ambiguidades sobre “pedido em aberto”**,
+permitindo separar claramente **problemas comerciais, produtivos e fiscais**,
+e fornecer uma **base sólida para tomada de decisão e automação via API**.
+
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SC6010 — Itens do Pedido de Venda
+
+| Coluna          | Descrição                         |
+| --------------- | --------------------------------- |
+| C6\_FILIAL      | Filial do item                    |
+| C6\_NUM         | Número do pedido                  |
+| C6\_PRODUTO     | Código do produto                 |
+| C6\_QTDVEN      | Quantidade vendida                |
+| C6\_QTDENT      | Quantidade entregue               |
+| C6\_PRCVEN      | Preço unitário de venda           |
+| C6\_BLOQUEI     | Bloqueio comercial do item        |
+| C6\_BLQ         | Bloqueio logístico/fiscal do item |
+| D\_E\_L\_E\_T\_ | Exclusão lógica                   |
+
+---
+
+##### SC5010 — Cabeçalho do Pedido de Venda
+
+| Coluna          | Descrição                         |
+| --------------- | --------------------------------- |
+| C5\_FILIAL      | Filial do pedido                  |
+| C5\_NUM         | Número do pedido                  |
+| C5\_EMISSAO     | Data de emissão                   |
+| C5\_CLIENTE     | Código do cliente                 |
+| C5\_LOJACLI     | Loja do cliente                   |
+| C5\_LIBEROK     | Indica se o pedido está liberado  |
+| C5\_BLQ         | Bloqueio no pedido                |
+| C5\_STATUS      | Status do pedido (ex.: cancelado) |
+| C5\_NOTA        | Número da nota fiscal             |
+| D\_E\_L\_E\_T\_ | Exclusão lógica                   |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna          | Descrição            |
+| --------------- | -------------------- |
+| B1\_COD         | Código do produto    |
+| B1\_DESC        | Descrição do produto |
+| D\_E\_L\_E\_T\_ | Exclusão lógica      |
+
+---
+
+##### SA1010 — Cadastro de Clientes
+
+| Coluna          | Descrição         |
+| --------------- | ----------------- |
+| A1\_COD         | Código do cliente |
+| A1\_LOJA        | Loja do cliente   |
+| A1\_NOME        | Nome do cliente   |
+| D\_E\_L\_E\_T\_ | Exclusão lógica   |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Somente itens ativos — `SC6010.D_E_L_E_T_ = ''`
+- Somente pedidos ativos — `SC5010.D_E_L_E_T_ = ''`
+- Somente produtos ativos — `SB1010.D_E_L_E_T_ = ''`
+- Somente clientes ativos — `SA1010.D_E_L_E_T_ = ''`
+- Somente itens com **saldo em aberto** — `(C6_QTDVEN - C6_QTDENT) > 0`
+- Exclusão de itens bloqueados — `C6_BLOQUEI / C6_BLQ`
+
+---
+
+#### 🧠 Regras de classificação do tipo de aberto
+
+- **Aberto físico**
+  - Existe saldo em aberto (`C6_QTDVEN > C6_QTDENT`)
+  - Pedido **não liberado** ou com restrições comerciais
+  - Representa pendência **quantitativa**, não necessariamente atendível
+
+- **Aberto comercial**
+  - Existe saldo em aberto
+  - Pedido **liberado** (`C5_LIBEROK = 'S'`)
+  - Pedido **não cancelado** (`C5_STATUS <> 'C'`)
+  - Pode ainda não estar apto a faturar
+
+- **Aberto faturável**
+  - Existe saldo em aberto
+  - Pedido liberado
+  - Pedido não cancelado
+  - Pedido **sem nota fiscal gerada** (`C5_NOTA IS NULL OR = ''`)
+  - Representa **fila real de faturamento****
+
+---
+
+#### 🧭 Regras de classificação do status do pedido (alinhado ao Power BI)
+
+O **status do pedido** é determinado **exclusivamente no nível do item (SC6010)**,
+com base na **quantidade entregue** e na **data prometida de entrega (`C6_ENTREG`)**,
+replicando exatamente a lógica utilizada no Power BI.
+
+- **Concluído**
+  - `C6_QTDENT >= C6_QTDVEN`
+
+- **Parcialmente Entregue**
+  - `C6_QTDENT > 0` e `C6_QTDENT < C6_QTDVEN`
+
+- **Sem Data**
+  - `C6_QTDENT < C6_QTDVEN`
+  - `C6_ENTREG IS NULL` ou `C6_ENTREG = '00000000'`
+
+- **Entrega prevista hoje**
+  - `C6_QTDENT < C6_QTDVEN`
+  - Data de entrega = data atual
+
+- **Atrasado**
+  - `C6_QTDENT < C6_QTDVEN`
+  - Data de entrega < data atual
+
+- **Entrega próximos 7 dias**
+  - `C6_QTDENT < C6_QTDVEN`
+  - Data de entrega > data atual e ≤ data atual + 7 dias
+
+- **Entrega futura**
+  - `C6_QTDENT < C6_QTDVEN`
+  - Data de entrega > data atual + 7 dias
+
+
+---
+
+#### 💾 Consulta
+
+```sql
+-- Página desejada
+DECLARE @Page INT = 1;        
+-- Registros por página
+DECLARE @PageSize INT = 100; 
+
+DECLARE @Offset INT = (@Page - 1) * @PageSize;
+
+SELECT
+    C6.C6_FILIAL        AS FILIAL,
+    C6.C6_NUM           AS PEDIDO,
+    C5.C5_EMISSAO       AS DATA_EMISSAO,
+    C6.C6_PRODUTO       AS PRODUTO,
+    SB1.B1_DESC         AS DESCRICAO_PRODUTO,
+    SA1.A1_COD          AS COD_CLIENTE,
+    SA1.A1_NOME         AS CLIENTE,
+    C6.C6_QTDVEN        AS QTD_VENDIDA,
+    C6.C6_QTDENT        AS QTD_ENTREGUE,
+    (C6.C6_QTDVEN - C6.C6_QTDENT) AS SALDO_ABERTO,
+    C6.C6_PRCVEN        AS PRECO_UNITARIO,
+    (C6.C6_QTDVEN - C6.C6_QTDENT) * C6.C6_PRCVEN AS VALOR_ABERTO,
+    CASE
+        WHEN C6.C6_ENTREG IS NULL OR C6.C6_ENTREG = '00000000'
+            THEN NULL
+        ELSE CONVERT(
+            DATE,
+            STUFF(STUFF(C6.C6_ENTREG, 5, 0, '-'), 8, 0, '-')
+        )
+    END AS DATA_ENTREGA,
+    CASE
+        WHEN C6.C6_QTDENT >= C6.C6_QTDVEN THEN 'Concluído'
+        WHEN C6.C6_QTDENT > 0
+         AND C6.C6_QTDENT < C6.C6_QTDVEN THEN 'Parcialmente Entregue'
+        WHEN C6.C6_QTDENT < C6.C6_QTDVEN
+         AND (C6.C6_ENTREG IS NULL OR C6.C6_ENTREG = '00000000') THEN 'Sem Data'
+        WHEN C6.C6_QTDENT < C6.C6_QTDVEN
+         AND CONVERT(DATE, STUFF(STUFF(C6.C6_ENTREG, 5, 0, '-'), 8, 0, '-'))
+             = CAST(GETDATE() AS DATE) THEN 'Entrega prevista hoje'
+        WHEN C6.C6_QTDENT < C6.C6_QTDVEN
+         AND CONVERT(DATE, STUFF(STUFF(C6.C6_ENTREG, 5, 0, '-'), 8, 0, '-'))
+             < CAST(GETDATE() AS DATE) THEN 'Atrasado'
+        WHEN C6.C6_QTDENT < C6.C6_QTDVEN
+         AND CONVERT(DATE, STUFF(STUFF(C6.C6_ENTREG, 5, 0, '-'), 8, 0, '-'))
+             > CAST(GETDATE() AS DATE)
+         AND CONVERT(DATE, STUFF(STUFF(C6.C6_ENTREG, 5, 0, '-'), 8, 0, '-'))
+             <= DATEADD(DAY, 7, CAST(GETDATE() AS DATE))
+             THEN 'Entrega próximos 7 dias'
+        WHEN C6.C6_QTDENT < C6.C6_QTDVEN
+         AND CONVERT(DATE, STUFF(STUFF(C6.C6_ENTREG, 5, 0, '-'), 8, 0, '-'))
+             > DATEADD(DAY, 7, CAST(GETDATE() AS DATE))
+             THEN 'Entrega futura'
+        ELSE 'Outro'
+    END AS STATUS_PEDIDO,
+    CASE
+        WHEN C5.C5_LIBEROK = 'S'
+         AND (C5.C5_BLQ IS NULL OR C5.C5_BLQ = '')
+         AND (C5.C5_STATUS IS NULL OR C5.C5_STATUS <> 'C')
+         AND (C5.C5_NOTA IS NULL OR C5.C5_NOTA = '')
+            THEN 'ABERTO FATURAVEL'
+        WHEN C5.C5_LIBEROK = 'S'
+         AND (C5.C5_BLQ IS NULL OR C5.C5_BLQ = '')
+         AND (C5.C5_STATUS IS NULL OR C5.C5_STATUS <> 'C')
+            THEN 'ABERTO COMERCIAL'
+        ELSE 'ABERTO FISICO'
+    END AS TIPO_ABERTO,
+    CASE
+        WHEN C5.C5_LIBEROK IS NULL OR C5.C5_LIBEROK <> 'S'
+            THEN 'BLOQUEADO POR LIBERACAO'
+        ELSE 'LIBERADO'
+    END AS STATUS_LIBERACAO
+FROM SC6010 C6
+INNER JOIN SC5010 C5
+    ON C5.C5_FILIAL = C6.C6_FILIAL
+   AND C5.C5_NUM    = C6.C6_NUM
+   AND C5.D_E_L_E_T_ = ''
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD = C6.C6_PRODUTO
+   AND SB1.D_E_L_E_T_ = ''
+INNER JOIN SA1010 SA1
+    ON SA1.A1_COD  = C5.C5_CLIENTE
+   AND SA1.A1_LOJA = C5.C5_LOJACLI
+   AND SA1.D_E_L_E_T_ = ''
+WHERE
+    C6.D_E_L_E_T_ = ''
+    AND (C6.C6_QTDVEN - C6.C6_QTDENT) > 0
+    AND (C6.C6_BLOQUEI IS NULL OR C6.C6_BLOQUEI = '')
+    AND (C6.C6_BLQ IS NULL OR C6.C6_BLQ = '')
+ORDER BY
+    TIPO_ABERTO DESC,
+    STATUS_PEDIDO,
+    VALOR_ABERTO DESC
+OFFSET @Offset ROWS
+FETCH NEXT @PageSize ROWS ONLY;
+```
+
