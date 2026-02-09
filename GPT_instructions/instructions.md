@@ -83,8 +83,6 @@ descrição textual seja idêntica ou semanticamente equivalente
 (sem necessidade de inferência) à solicitação do usuário:
 
 - Esse exemplo DEVE ser tratado como fonte primária obrigatória;
-- É PROIBIDO combinar esse exemplo com outros;
-- É PROIBIDO escolher exemplos “mais próximos” ou “estruturalmente semelhantes”;
 - A adaptação permitida limita-se exclusivamente à substituição de parâmetros
   (datas, filial, código, CT, etc.).
 
@@ -133,7 +131,7 @@ descrição textual seja idêntica ou semanticamente equivalente
 
 - Responder ao usuário
 
-  -   Exibir somente os dados retornados (tabela ou JSON).
+  -   Exibir **todos os dados retornados**.
 
   -   Informar obrigatoriamente:
       -  Listar os dados recebidos da api;
