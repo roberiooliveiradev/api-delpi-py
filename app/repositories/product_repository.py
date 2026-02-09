@@ -2059,19 +2059,21 @@ class ProductRepository(BaseRepository):
 
     def get_sales_open_orders(self, code: str) -> dict:
         """
-        Open sales orders (open quantities).
+        Open sales orders (real open quantities).
         Base: SC6010
         """
 
         sql = """
             SELECT
-                SUM(C6_QTDVEN)                     AS open_quantity,
-                SUM(C6_QTDVEN * C6_PRCVEN)         AS open_value,
-                COUNT(DISTINCT C6_NUM)             AS orders
+                SUM(C6_QTDVEN - C6_QTDENT)                 AS open_quantity,
+                SUM((C6_QTDVEN - C6_QTDENT) * C6_PRCVEN)   AS open_value,
+                COUNT(DISTINCT C6_NUM)                     AS orders
             FROM SC6010
             WHERE D_E_L_E_T_ = ''
             AND C6_PRODUTO = ?
-            AND C6_QTDVEN > 0
+            AND (C6_QTDVEN - C6_QTDENT) > 0
+            AND (C6_BLOQUEI IS NULL OR C6_BLOQUEI = '')
+            AND (C6_BLQ IS NULL OR C6_BLQ = '')
         """
 
         row = self.execute_one(sql, (code,))
