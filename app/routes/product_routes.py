@@ -234,10 +234,10 @@ def purchases(
         return error_response(f"Erro inesperado: {e}")
 
 
-@router.get(
-    "/{code}/sales",
-    summary="Resumo consolidado de vendas do produto"
-)
+# @router.get(
+#     "/{code}/sales",
+#     summary="Resumo consolidado de vendas do produto"
+# )
 def product_sales_summary(code: str):
     """
     Retorna o resumo consolidado de vendas realizadas do produto.
@@ -254,10 +254,10 @@ def product_sales_summary(code: str):
         return error_response(f"Erro inesperado: {e}")
 
 
-@router.get(
-    "/{code}/sales/open-orders",
-    summary="Carteira de pedidos de venda do produto"
-)
+# @router.get(
+#     "/{code}/sales/open-orders",
+#     summary="Carteira de pedidos de venda do produto"
+# )
 def product_sales_open_orders(code: str):
     """
     Retorna a carteira de pedidos de venda (abertos).
@@ -275,10 +275,10 @@ def product_sales_open_orders(code: str):
 
 
 
-@router.get(
-    "/{code}/sales/billing",
-    summary="Resumo de faturamento do produto"
-)
+# @router.get(
+#     "/{code}/sales/billing",
+#     summary="Resumo de faturamento do produto"
+# )
 def product_sales_billing(code: str):
     """
     Retorna o resumo de faturamento financeiro do produto.
@@ -295,10 +295,10 @@ def product_sales_billing(code: str):
         return error_response(f"Erro inesperado: {e}")
 
 
-@router.get(
-    "/{code}/pricing",
-    summary="Preços comerciais do produto"
-)
+# @router.get(
+#     "/{code}/pricing",
+#     summary="Preços comerciais do produto"
+# )
 def product_pricing(code: str):
     """
     Retorna os preços do produto conforme tabelas comerciais.
