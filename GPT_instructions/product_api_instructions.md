@@ -40,6 +40,7 @@ A **Product API** centraliza informações técnicas, comerciais, produtivas e f
 | GET | `/products/{code}/inspection` | Inspeção de processo (QP6 / QP7 / QP8) |
 | GET | `/products/{code}/analyser` | Análise completa do produto |
 | GET | `/products/{code}/stock` | Estoque por filial e local |
+| GET | `/products/{code}/internal-movements` | Movimentações internas de estoque |
 | GET | `/products/{code}/suppliers` | Fornecedores vinculados ao produto |
 | GET | `/products/{code}/customers` | Clientes amarrados ao produto |
 | GET | `/products/{code}/inbound-invoice-items` | Notas fiscais de entrada |
@@ -495,6 +496,94 @@ GET /products/{code}/pricing
 - DA1010
 - DA0010
 - SB1010
+
+---
+
+## 🔹 17. Movimentações Internas de Produto
+```http
+GET /products/{code}/internal-movements
+```
+
+
+
+### 📌 Parâmetros
+| Nome       | Tipo   | Obrigatório | Descrição                          |
+| ---------- | ------ | ----------- | ---------------------------------- |
+| code       | string | ✔           | Código do produto (SD3.D3_COD)     |
+| page       | int    | ✖           | Página (default: 1)                |
+| page_size  | int    | ✖           | Registros por página (default: 50) |
+| date_start | string | ✖           | Data inicial da movimentação       |
+| date_end   | string | ✖           | Data final da movimentação         |
+| branch     | string | ✖           | Filial (D3_FILIAL)                 |
+| location   | string | ✖           | Local de estoque (D3_LOCAL)        |
+| tm         | string | ✖           | Tipo de movimento (D3_TM)          |
+| op         | string | ✖           | Ordem de produção (D3_OP)          |
+
+> 📅 Datas aceitam múltiplos formatos (YYYY-MM-DD, DD/MM/YYYY, ISO, etc.), sendo convertidas internamente para o padrão Protheus.
+
+### 📗 Tabelas consultadas
+
+- SD3010 — Movimentações internas
+- SB1010 — Cadastro do produto
+
+### 📘 Exemplo de requisição
+```http
+GET /products/10080522/internal-movements?page=1&page_size=20&branch=01&date_start=2024-01-01
+```
+
+### 📘 Exemplo de resposta
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 3,
+    "page": 1,
+    "page_size": 20,
+    "total_pages": 1,
+    "filters": {
+      "date_start": "20240101",
+      "date_end": null,
+      "branch": "01",
+      "location": null,
+      "tm": null,
+      "op": null
+    },
+    "data": [
+      {
+        "branch": "01",
+        "location": "01",
+        "document": "REQ000123",
+        "issue_date": "20240115",
+        "product_code": "10080522",
+        "product_description": "TERMINAL BANDEIRA",
+        "unit": "UN",
+        "movement_type": "501",
+        "cf": "RE",
+        "quantity": -200,
+        "production_order": "OP000045",
+        "user_name": "PCP01"
+      }
+    ]
+  }
+}
+```
+
+### 📗 Observações Importantes
+
+- ❌ Não inclui notas fiscais
+  - NF Entrada → SD1010
+  - NF Saída → SD2010
+
+- ✔ Utilizar esta rota para:
+  - consumo real de produção
+  - rastreamento de ajustes
+  - auditoria de estoque
+
+- Quantidades podem ser:
+  - positivas → entrada interna
+  - negativas → saída / consumo
+
 
 ---
 
