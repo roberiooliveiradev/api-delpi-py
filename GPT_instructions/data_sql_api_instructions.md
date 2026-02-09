@@ -2464,13 +2464,15 @@ DECLARE @DATA   DATE       = '2026-02-09';
 WITH TEMPO_REAL AS (
     SELECT
         OP.C2_OP,
-        SUM(
-            DATEDIFF(
-                MINUTE,
-                CAST(OA.H8_DTINI AS DATETIME) + CAST(OA.H8_HRINI AS DATETIME),
-                CAST(OA.H8_DTFIM AS DATETIME) + CAST(OA.H8_HRFIM AS DATETIME)
+        CAST(
+            SUM(
+                DATEDIFF(
+                    MINUTE,
+                    CAST(OA.H8_DTINI AS DATETIME) + CAST(OA.H8_HRINI AS DATETIME),
+                    CAST(OA.H8_DTFIM AS DATETIME) + CAST(OA.H8_HRFIM AS DATETIME)
+                )
             ) / 60.0
-        ) AS TEMPO_REAL_HORAS
+        AS FLOAT) AS TEMPO_REAL_HORAS
     FROM SC2010 OP
     INNER JOIN SD4010 RE
         ON RE.D4_OP     = OP.C2_OP
@@ -2494,10 +2496,11 @@ TEMPO_PLANEJADO AS (
     SELECT
         OP.C2_OP,
         OP.C2_PRODUTO,
-        OP.C2_QUANT                           AS QTD_MILHEIRO,
-        (OP.C2_QUANT * 1000)                 AS QTD_UNIDADES,
-        SUM(SG.G2_SETUP)                     AS SETUP_HORAS,
-        SUM(SG.G2_TEMPAD * OP.C2_QUANT)      AS TEMPO_PADRAO_HORAS
+        CAST(OP.C2_QUANT AS FLOAT)               AS QTD_MILHEIRO,
+        CAST(OP.C2_QUANT * 1000 AS FLOAT)        AS QTD_UNIDADES,
+        CAST(SUM(SG.G2_SETUP) AS FLOAT)          AS SETUP_HORAS,
+        CAST(SUM(SG.G2_TEMPAD * OP.C2_QUANT) AS FLOAT)
+                                                AS TEMPO_PADRAO_HORAS
     FROM SC2010 OP
     INNER JOIN SD4010 RE
         ON RE.D4_OP     = OP.C2_OP
@@ -2525,10 +2528,14 @@ SELECT
     P.QTD_UNIDADES,
     P.SETUP_HORAS,
     P.TEMPO_PADRAO_HORAS,
-    (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS)     AS TEMPO_PLANEJADO_HORAS,
+    CAST(
+        P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS
+    AS FLOAT)                                   AS TEMPO_PLANEJADO_HORAS,
     R.TEMPO_REAL_HORAS,
-    (R.TEMPO_REAL_HORAS -
-     (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS))   AS DESVIO_HORAS,
+    CAST(
+        R.TEMPO_REAL_HORAS -
+        (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS)
+    AS FLOAT)                                   AS DESVIO_HORAS,
     CASE
         WHEN R.TEMPO_REAL_HORAS <= (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS)
             THEN 'OK'
@@ -2541,4 +2548,5 @@ INNER JOIN TEMPO_REAL R
     ON R.C2_OP = P.C2_OP
 ORDER BY
     DESVIO_HORAS DESC;
+
 ```
