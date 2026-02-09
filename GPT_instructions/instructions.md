@@ -52,7 +52,7 @@ E gerar um relatório final formal.
 
 ---
 
-## ⚙️ Execução SQL Direta (`/data/sql`) — Regra de Reuso de Exemplos (OBRIGATÓRIA)
+## ⚙️ Execução SQL Direta (`/data/sql`) — Regra de Reuso de Exemplos
 
 ### 📌 Objetivo
 
