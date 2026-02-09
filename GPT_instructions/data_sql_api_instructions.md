@@ -1722,18 +1722,18 @@ ORDER BY
     SD4.D4_COD;
 ```
 
-### 14. Usuário: **“Tempo médio real de consumo por terminal (CT específico, sem duplicidade de tempo)”**
+### 14. Usuário: **“Tempo médio real de consumo de uma matéria prima para o CT-xx (CT específico, sem duplicidade de tempo)”**
 
 ---
 
 #### 🎯 Objetivo
 
-Calcular, para cada **terminal elétrico**, o **tempo médio real de consumo por peça**, utilizando **dados reais de produção**, considerando:
+Calcular, para cada **matéria prima**, o **tempo médio real de consumo por unidade**, utilizando **dados reais de produção**, considerando:
 
 - apenas **apontamentos de produção válidos** (`H6_TIPO = 'P'`);
 - um **Centro de Trabalho (CT) específico**;
 - uma **faixa de datas definida**;
-- a **quantidade real consumida** de cada terminal;
+- a **quantidade real consumida** de cada matéria prima;
 - a **eliminação de duplicidade de tempo**, consolidando todos os apontamentos pertencentes à mesma **OP + operação**.
 
 O resultado é um indicador **ponderado pelo volume real produzido**, tecnicamente consistente, adequado para análise de desempenho produtivo e engenharia de tempos.
@@ -1832,9 +1832,9 @@ T_{i,j} = \sum (DataHoraFim_{i,j} - DataHoraInicio_{i,j})
 
 ---
 
-- **📦 Quantidade real consumida do terminal**
+- **📦 Quantidade real consumida da matéria prima**
 
-Para cada terminal \(t\), OP \(i\) e operação \(j\):
+Para cada matéria prima \(t\), OP \(i\) e operação \(j\):
 
 \[
 Q_{i,j,t} = \sum
@@ -1846,9 +1846,9 @@ D4\_QTDEORI - D4\_QUANT, & \text{se } D4\_QTDEORI > D4\_QUANT \\
 
 ---
 
-#### ⏱️ Tempo médio real por terminal (ponderado)
+#### ⏱️ Tempo médio real por materia prima (ponderado)
 
-Para cada terminal \(t\):
+Para cada materia prima \(t\):
 
 \[
 \boxed{
@@ -1911,7 +1911,7 @@ CONSUMO AS (
         SD4.D4_OP,
         SD4.D4_OPERAC,
         SD4.D4_COD,
-        -- Quantidade REAL consumida do terminal
+        -- Quantidade REAL consumida
         SUM(
             CASE
                 WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
@@ -1930,12 +1930,12 @@ CONSUMO AS (
 )
 SELECT
     SH6.H6_FILIAL AS FILIAL,
-    SB1.B1_COD   AS COD_TERMINAL,
-    SB1.B1_DESC  AS DESC_TERMINAL,
-    SB1.B1_UM    AS UM,
+    SB1.B1_COD   AS CODIGO,
+    SB1.B1_DESC  AS DESCRICAO,
+    SB1.B1_UM    AS UNIDADE,
     SH6.H6_RECURSO AS CT,
     -- Quantidade total REAL no período / CT
-    SUM(C.QTD_CONSUMIDA) AS QTD_TOTAL_TERMINAL,
+    SUM(C.QTD_CONSUMIDA) AS QTD_TOTAL_MP,
     -- Tempo total REAL (sem duplicidade)
     SUM(SH6.TEMPO_OP_SEG) AS TEMPO_TOTAL_SEG,
     -- Tempo médio REAL por peça (ponderado)
