@@ -2316,3 +2316,229 @@ OFFSET @Offset ROWS
 FETCH NEXT @PageSize ROWS ONLY;
 ```
 
+### 17. Usuário: **"Comparação de tempo planejado × tempo real de ordens de produção (com setup, hora-mil e quantidade em milheiro)."**
+
+#### 🎯 Objetivo
+
+Identificar e analisar o **desempenho real das ordens de produção (OPs)** no Protheus,
+comparando o **tempo planejado** (derivado do roteiro de operações)
+com o **tempo real executado**, garantindo que:
+
+- apenas **OPs ativas e finalizadas** sejam consideradas;
+- o **tempo planejado** seja calculado de forma **determinística**, considerando:
+  - **setup em horas** (uma única vez por operação);
+  - **tempo padrão em hora-mil (HM)**;
+  - **quantidade da OP expressa em milheiro**;
+- o **tempo real** seja apurado a partir de **data + hora reais de início e fim**;
+- o cálculo seja **auditável, reproduzível e alinhado ao PCP**;
+- seja possível **identificar desvios de eficiência produtiva**, classificando as OPs em:
+  - dentro do esperado;
+  - atenção;
+  - estouro de tempo.
+
+O objetivo é **eliminar ambiguidades no cálculo de tempo produtivo**,
+permitindo comparar **planejamento × execução real**,
+identificar gargalos operacionais
+e fornecer uma **base sólida para análise de eficiência, custos e melhoria contínua**.
+
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SC2010 — Ordens de Produção
+
+| Coluna | Descrição |
+|------|----------|
+| C2_FILIAL | Filial da OP |
+| C2_OP | Número da ordem de produção |
+| C2_PRODUTO | Código do produto |
+| C2_QUANT | Quantidade planejada (**em milheiro**) |
+| C2_QUJE | Quantidade produzida (em milheiro) |
+| D_E_L_E_T_ | Exclusão lógica |
+
+---
+
+##### SD4010 — Requisições da Ordem de Produção
+
+| Coluna | Descrição |
+|------|----------|
+| D4_FILIAL | Filial da requisição |
+| D4_OP | Número da OP |
+| D4_OPERAC | Código da operação |
+| D_E_L_E_T_ | Exclusão lógica |
+
+---
+
+##### SG2010 — Roteiro de Operações
+
+| Coluna | Descrição | Unidade |
+|------|----------|--------|
+| G2_FILIAL | Filial do roteiro | — |
+| G2_PRODUTO | Código do produto | — |
+| G2_OPERAC | Operação do roteiro | — |
+| G2_SETUP | Tempo de setup | **Horas** |
+| G2_TEMPAD | Tempo padrão | **Hora-mil** |
+| D_E_L_E_T_ | Exclusão lógica | — |
+
+---
+
+##### SH8010 — Apontamento de Operações
+
+| Coluna | Descrição |
+|------|----------|
+| H8_FILIAL | Filial do apontamento |
+| H8_OP | Ordem de produção |
+| H8_OPER | Operação |
+| H8_DTINI | Data de início da operação |
+| H8_HRINI | Hora de início da operação |
+| H8_DTFIM | Data de fim da operação |
+| H8_HRFIM | Hora de fim da operação |
+| D_E_L_E_T_ | Exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Somente OPs ativas — `SC2010.D_E_L_E_T_ = ''`
+- Somente requisições ativas — `SD4010.D_E_L_E_T_ = ''`
+- Somente operações ativas — `SG2010.D_E_L_E_T_ = ''`
+- Somente apontamentos ativos — `SH8010.D_E_L_E_T_ = ''`
+- Somente OPs **finalizadas** — `C2_QUANT = C2_QUJE`
+- Somente OPs com início na data analisada — `H8_DTINI = @DATA`
+- Respeito estrito à **filial em todas as tabelas**
+
+---
+
+#### 🧠 Regras de cálculo do tempo planejado
+
+##### Setup
+
+- Origem: `SG2010.G2_SETUP`
+- Unidade: **horas**
+- Regra: considerado **uma única vez por operação**, sem multiplicação por quantidade
+
+```
+Setup_total (h) = Σ G2_SETUP
+```
+
+##### Tempo padrão (hora-mil)
+
+- Origem: `SG2010.G2_TEMPAD`
+- Unidade: **hora-mil (HM)**
+- Quantidade da OP: `SC2010.C2_QUANT` (**em milheiro**)
+
+```
+Tempo_padrão (h) = G2_TEMPAD × C2_QUANT
+```
+
+##### Tempo planejado total
+
+```
+Tempo_planejado (h) = Setup_total + Tempo_padrão
+```
+
+---
+
+#### ⏱️ Regras de cálculo do tempo real
+
+```
+Tempo_real (h) = DATEDIFF(MINUTE, DTINI+HRINI, DTFIM+HRFIM) / 60
+```
+
+---
+
+#### 🧭 Regras de classificação do desempenho da OP
+
+- **OK** → Tempo real ≤ tempo planejado
+- **ATENÇÃO** → Tempo real ≤ tempo planejado × 1,10
+- **ESTOURO** → Tempo real > tempo planejado × 1,10
+
+---
+
+#### 💾 Consulta
+
+```sql
+DECLARE @FILIAL VARCHAR(2) = '01';
+DECLARE @DATA   DATE       = '2026-02-09';
+
+WITH TEMPO_REAL AS (
+    SELECT
+        OP.C2_OP,
+        SUM(
+            DATEDIFF(
+                MINUTE,
+                CAST(OA.H8_DTINI AS DATETIME) + CAST(OA.H8_HRINI AS DATETIME),
+                CAST(OA.H8_DTFIM AS DATETIME) + CAST(OA.H8_HRFIM AS DATETIME)
+            ) / 60.0
+        ) AS TEMPO_REAL_HORAS
+    FROM SC2010 OP
+    INNER JOIN SD4010 RE
+        ON RE.D4_OP     = OP.C2_OP
+       AND RE.D4_FILIAL = OP.C2_FILIAL
+    INNER JOIN SH8010 OA
+        ON OA.H8_OP      = RE.D4_OP
+       AND OA.H8_OPER   = RE.D4_OPERAC
+       AND OA.H8_FILIAL = OP.C2_FILIAL
+    WHERE
+            OP.C2_FILIAL = @FILIAL
+        AND OA.H8_DTINI = @DATA
+        AND OP.C2_QUANT = OP.C2_QUJE
+        AND OP.D_E_L_E_T_ = ''
+        AND RE.D_E_L_E_T_ = ''
+        AND OA.D_E_L_E_T_ = ''
+    GROUP BY
+        OP.C2_OP
+),
+
+TEMPO_PLANEJADO AS (
+    SELECT
+        OP.C2_OP,
+        OP.C2_PRODUTO,
+        OP.C2_QUANT                           AS QTD_MILHEIRO,
+        (OP.C2_QUANT * 1000)                 AS QTD_UNIDADES,
+        SUM(SG.G2_SETUP)                     AS SETUP_HORAS,
+        SUM(SG.G2_TEMPAD * OP.C2_QUANT)      AS TEMPO_PADRAO_HORAS
+    FROM SC2010 OP
+    INNER JOIN SD4010 RE
+        ON RE.D4_OP     = OP.C2_OP
+       AND RE.D4_FILIAL = OP.C2_FILIAL
+    INNER JOIN SG2010 SG
+        ON SG.G2_FILIAL  = OP.C2_FILIAL
+       AND SG.G2_PRODUTO = OP.C2_PRODUTO
+       AND SG.G2_OPERAC  = RE.D4_OPERAC
+    WHERE
+            OP.C2_FILIAL = @FILIAL
+        AND OP.C2_QUANT  = OP.C2_QUJE
+        AND OP.D_E_L_E_T_ = ''
+        AND RE.D_E_L_E_T_ = ''
+        AND SG.D_E_L_E_T_ = ''
+    GROUP BY
+        OP.C2_OP,
+        OP.C2_PRODUTO,
+        OP.C2_QUANT
+)
+
+SELECT
+    P.C2_OP,
+    P.C2_PRODUTO,
+    P.QTD_MILHEIRO,
+    P.QTD_UNIDADES,
+    P.SETUP_HORAS,
+    P.TEMPO_PADRAO_HORAS,
+    (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS)     AS TEMPO_PLANEJADO_HORAS,
+    R.TEMPO_REAL_HORAS,
+    (R.TEMPO_REAL_HORAS -
+     (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS))   AS DESVIO_HORAS,
+    CASE
+        WHEN R.TEMPO_REAL_HORAS <= (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS)
+            THEN 'OK'
+        WHEN R.TEMPO_REAL_HORAS <= (P.SETUP_HORAS + P.TEMPO_PADRAO_HORAS) * 1.10
+            THEN 'ATENCAO'
+        ELSE 'ESTOURO'
+    END AS STATUS
+FROM TEMPO_PLANEJADO P
+INNER JOIN TEMPO_REAL R
+    ON R.C2_OP = P.C2_OP
+ORDER BY
+    DESVIO_HORAS DESC;
+```
