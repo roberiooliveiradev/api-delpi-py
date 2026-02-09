@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from app.services.product_service import get_product, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers, get_structure_excel
 from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products_by_description
-from app.services.product_service import get_purchases, get_sales_summary, get_sales_open_orders, get_sales_billing, get_product_pricing
+from app.services.product_service import get_purchases, get_sales_summary, get_sales_open_orders, get_sales_billing, get_product_pricing, get_internal_movements
 from app.core.responses import success_response, error_response
 from app.core.exceptions import DatabaseConnectionError
 from app.utils.logger import log_info, log_error
@@ -234,10 +234,10 @@ def purchases(
         return error_response(f"Erro inesperado: {e}")
 
 
-# @router.get(
-#     "/{code}/sales",
-#     summary="Resumo consolidado de vendas do produto"
-# )
+@router.get(
+    "/{code}/sales",
+    summary="Resumo consolidado de vendas do produto"
+)
 def product_sales_summary(code: str):
     """
     Retorna o resumo consolidado de vendas realizadas do produto.
@@ -254,10 +254,10 @@ def product_sales_summary(code: str):
         return error_response(f"Erro inesperado: {e}")
 
 
-# @router.get(
-#     "/{code}/sales/open-orders",
-#     summary="Carteira de pedidos de venda do produto"
-# )
+@router.get(
+    "/{code}/sales/open-orders",
+    summary="Carteira de pedidos de venda do produto"
+)
 def product_sales_open_orders(code: str):
     """
     Retorna a carteira de pedidos de venda (abertos).
@@ -275,10 +275,10 @@ def product_sales_open_orders(code: str):
 
 
 
-# @router.get(
-#     "/{code}/sales/billing",
-#     summary="Resumo de faturamento do produto"
-# )
+@router.get(
+    "/{code}/sales/billing",
+    summary="Resumo de faturamento do produto"
+)
 def product_sales_billing(code: str):
     """
     Retorna o resumo de faturamento financeiro do produto.
@@ -295,10 +295,10 @@ def product_sales_billing(code: str):
         return error_response(f"Erro inesperado: {e}")
 
 
-# @router.get(
-#     "/{code}/pricing",
-#     summary="Preços comerciais do produto"
-# )
+@router.get(
+    "/{code}/pricing",
+    summary="Preços comerciais do produto"
+)
 def product_pricing(code: str):
     """
     Retorna os preços do produto conforme tabelas comerciais.
@@ -335,6 +335,44 @@ def stock(
         )
     except Exception as e:
         log_error(f"Erro ao consultar estoque do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+
+@router.get(
+    "/{code}/internal-movements",
+    summary="Histórico de movimentações internas do produto"
+)
+def internal_movements(
+    code: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    date_start: Optional[str] = Query(None),
+    date_end: Optional[str] = Query(None),
+    branch: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    tm: Optional[str] = Query(None, description="Tipo de movimento (D3_TM)"),
+    op: Optional[str] = Query(None, description="Ordem de produção")
+):
+    try:
+        result = get_internal_movements(
+            code,
+            page,
+            page_size,
+            date_start,
+            date_end,
+            branch,
+            location,
+            tm,
+            op
+        )
+
+        return success_response(
+            data=result,
+            message=f"Movimentações internas do produto {code} retornadas com sucesso."
+        )
+
+    except Exception as e:
+        log_error(f"Erro ao consultar movimentações internas de {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
 
@@ -431,3 +469,4 @@ def customers(
     except Exception as e:
         log_error(f"Erro ao consultar clientes do item {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
+

@@ -713,3 +713,38 @@ def get_product_pricing(code: str) -> dict:
     except Exception as e:
         log_error(f"Erro ao consultar preços do produto {code}: {e}")
         raise DatabaseConnectionError(str(e))
+
+
+# --------------------------------------------------
+# MOVEMENTS
+# --------------------------------------------------
+def get_internal_movements(
+    code: str,
+    page: int = 1,
+    page_size: int = 50,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    branch: Optional[str] = None,
+    location: Optional[str] = None,
+    tm: Optional[str] = None,
+    op: Optional[str] = None
+) -> dict:
+
+    repo = ProductRepository()
+    log_info(f"Buscando movimentações internas do produto {code}")
+
+    try:
+        return repo.list_internal_movements(
+            code,
+            page,
+            page_size,
+            date_start,
+            date_end,
+            branch,
+            location,
+            tm,
+            op
+        )
+    except Exception as e:
+        log_error(f"Erro ao buscar movimentações internas do produto {code}: {e}")
+        raise DatabaseConnectionError(str(e))

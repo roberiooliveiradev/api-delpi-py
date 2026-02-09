@@ -2182,3 +2182,110 @@ class ProductRepository(BaseRepository):
             },
             "prices": rows
         }
+
+
+    # -------------------------------
+    # 🔹 MOVEMENTS
+    # -------------------------------
+    def list_internal_movements(
+        self,
+        code: str,
+        page: int = 1,
+        page_size: int = 50,
+        date_start: Optional[str] = None,
+        date_end: Optional[str] = None,
+        branch: Optional[str] = None,
+        location: Optional[str] = None,
+        tm: Optional[str] = None,
+        op: Optional[str] = None,
+    ) -> dict:
+
+        offset = (page - 1) * page_size
+
+        filters = ["SD3.D_E_L_E_T_ = ''", "SD3.D3_COD = ?"]
+        params = [code]
+
+        if date_start:
+            date_start = self._convert_date_to_protheus(date_start)
+            filters.append("SD3.D3_EMISSAO >= ?")
+            params.append(date_start)
+
+        if date_end:
+            date_end = self._convert_date_to_protheus(date_end)
+            filters.append("SD3.D3_EMISSAO <= ?")
+            params.append(date_end)
+
+        if branch:
+            filters.append("SD3.D3_FILIAL = ?")
+            params.append(branch)
+
+        if location:
+            filters.append("SD3.D3_LOCAL = ?")
+            params.append(location)
+
+        if tm:
+            filters.append("SD3.D3_TM = ?")
+            params.append(tm)
+
+        if op:
+            filters.append("SD3.D3_OP = ?")
+            params.append(op)
+
+        where_clause = " AND ".join(filters)
+
+        count_sql = f"""
+            SELECT COUNT(*) AS total
+            FROM SD3010 SD3
+            WHERE {where_clause}
+        """
+
+        total = int(self.execute_one(count_sql, tuple(params))["total"] or 0)
+
+        data_sql = f"""
+            SELECT
+                SD3.D3_FILIAL   AS branch,
+                SD3.D3_LOCAL    AS location,
+                SD3.D3_DOC      AS document,
+                SD3.D3_EMISSAO  AS issue_date,
+
+                SD3.D3_COD      AS product_code,
+                SB1.B1_DESC     AS product_description,
+                SB1.B1_UM       AS unit,
+
+                SD3.D3_TM       AS movement_type,
+                SD3.D3_CF       AS cf,
+                SD3.D3_QUANT    AS quantity,
+                SD3.D3_OP       AS production_order,
+                SD3.D3_USUARIO  AS user_name
+
+            FROM SD3010 SD3
+            INNER JOIN SB1010 SB1
+                ON SB1.B1_COD = SD3.D3_COD
+            AND SB1.D_E_L_E_T_ = ''
+
+            WHERE {where_clause}
+            ORDER BY SD3.D3_EMISSAO DESC, SD3.R_E_C_N_O_ DESC
+            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """
+
+        rows = self.execute_query(
+            data_sql,
+            tuple(params + [offset, page_size])
+        )
+
+        return {
+            "success": True,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "filters": {
+                "date_start": date_start,
+                "date_end": date_end,
+                "branch": branch,
+                "location": location,
+                "tm": tm,
+                "op": op
+            },
+            "data": rows
+        }
