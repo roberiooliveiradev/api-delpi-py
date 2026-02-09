@@ -160,7 +160,9 @@ class ProductRepository(BaseRepository):
                     "work_center": r["work_center"],
                     "resource_code": r["resource_code"],
                     "setup_hours": r["setup_hours"],
-                    "standard_time_hours": r["standard_time_hours"],
+                    "standard_time_hour_mil": r["standard_time_hour_mil"],
+                    "standard_time_hours_piece": r["standard_time_hours_piece"],
+                    "standard_time_minutes_piece": r["standard_time_minutes_piece"],
                     "operation_type": r["operation_type"],
                     "mandatory": {
                         "operation": r["mandatory_operation"] == "1",
