@@ -1386,8 +1386,11 @@ class ProductRepository(BaseRepository):
                 SG2.G2_RECURSO AS resource_code,
                 SG2.G2_CTRAB   AS work_center,
 
-                SG2.G2_SETUP   AS setup_hours,
-                SG2.G2_TEMPAD  AS standard_time_hours,
+                SG2.G2_SETUP                    AS setup_hours, 
+                SG2.G2_TEMPAD                   AS standard_time_hour_mil, 
+                SG2.G2_TEMPAD / 1000.0          AS standard_time_hours_piece, 
+                (SG2.G2_TEMPAD / 1000.0) * 60   AS standard_time_minutes_piece, 
+
 
                 SG2.G2_TPOPER  AS operation_type,
                 SG2.G2_OPE_OBR AS mandatory_operation,
