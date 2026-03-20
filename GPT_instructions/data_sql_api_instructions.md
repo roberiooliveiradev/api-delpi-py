@@ -2550,3 +2550,207 @@ ORDER BY
     DESVIO_HORAS DESC;
 
 ```
+
+
+### 18. Usuário: **"Quantidade consumida real do item 10080063 por produto do grupo 9030 no mês atual."**
+
+#### 🎯 Objetivo
+
+Identificar e documentar o **consumo real** do item **10080063** na base Protheus,
+considerando apenas os **produtos acabados do grupo 9030**,
+com apuração **por produto** dentro do **mês atual**.
+
+O objetivo é garantir que o cálculo utilize a lógica correta da tabela **SD4010**,
+eliminando a ambiguidade entre:
+
+- **quantidade originalmente empenhada**;
+- **saldo ainda não consumido**;
+- **consumo real efetivo da matéria-prima**.
+
+A consulta foi construída para responder com precisão:
+
+- quais produtos do grupo **9030** consumiram o item **10080063**;
+- quanto cada produto consumiu no período analisado;
+- qual a lógica correta de cálculo do consumo real na **SD4**;
+- como evitar interpretações incorretas usando apenas `D4_QTDEORI`.
+
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SD4010 — Requisições da Ordem de Produção
+
+| Coluna | Descrição |
+|------|----------|
+| D4_FILIAL | Filial da requisição |
+| D4_COD | Código do item requisitado |
+| D4_PRODUTO | Produto pai da requisição |
+| D4_DATA | Data do empenho |
+| D4_QTDEORI | Quantidade originalmente empenhada |
+| D4_QUANT | Saldo da quantidade empenhada |
+| D_E_L_E_T_ | Exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna | Descrição |
+|------|----------|
+| B1_COD | Código do produto |
+| B1_DESC | Descrição do produto |
+| B1_GRUPO | Grupo de estoque |
+| D_E_L_E_T_ | Exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Somente registros ativos da SD4 — `SD4010.D_E_L_E_T_ = ''`
+- Somente registros ativos da SB1 — `SB1010.D_E_L_E_T_ = ''`
+- Somente o item analisado — `SD4010.D4_COD = '10080063'`
+- Somente produtos do grupo **9030** — `SB1010.B1_GRUPO = '9030'`
+- Somente registros do **mês atual**
+- Somente consumo real positivo no resultado final
+
+No caso validado em conversa, o mês atual foi tratado como:
+
+- início: `20260301`
+- fim: `20260331`
+
+---
+
+#### 🧠 Regra de cálculo do consumo real
+
+##### Quantidade originalmente empenhada
+
+- Origem: `SD4010.D4_QTDEORI`
+- Significado: quantidade inicialmente reservada/empenhada para a OP
+- **Não representa sozinha o consumo real**
+
+##### Saldo da quantidade empenhada
+
+- Origem: `SD4010.D4_QUANT`
+- Significado: quantidade que ainda permanece como saldo do empenho
+- Deve ser abatida da quantidade originalmente empenhada
+
+##### Consumo real
+
+A validação do schema e dos exemplos mostrou que a lógica correta é:
+
+```sql
+CASE
+    WHEN D4_QTDEORI > D4_QUANT
+    THEN D4_QTDEORI - D4_QUANT
+    ELSE 0
+END
+```
+
+Isso significa:
+
+```text
+Consumo real = Quantidade empenhada originalmente - Saldo ainda não consumido
+```
+
+---
+
+#### ✅ Validação da lógica aplicada
+
+Durante a validação da tabela **SD4010**, foi confirmado que:
+
+- `D4_QTDEORI` = **Quantidade Empenhada**
+- `D4_QUANT` = **Saldo da Quantidade Empenhada**
+
+Portanto:
+
+- usar apenas `D4_QTDEORI` pode superestimar consumo em cenários onde ainda exista saldo;
+- o cálculo auditável e correto para consumo real é **`D4_QTDEORI - D4_QUANT`**;
+- quando `D4_QUANT = 0`, o consumo real coincide com a quantidade empenhada original;
+- quando existe saldo, o consumo real deve ser reduzido proporcionalmente.
+
+---
+
+#### 📦 Resultado esperado
+
+A consulta retorna, para cada produto do grupo **9030**:
+
+- código do produto pai;
+- descrição do produto;
+- quantidade consumida real do item **10080063** no mês atual.
+
+Isso permite:
+
+- medir o consumo real da matéria-prima por produto;
+- comparar consumo entre itens do grupo 9030;
+- alimentar análises de consumo, custo e rastreabilidade.
+
+---
+
+#### 💾 Consulta
+
+```sql
+SELECT
+    SD4.D4_PRODUTO AS COD_PRODUTO,
+    SB1.B1_DESC    AS DESC_PRODUTO,
+    SUM(
+        CASE
+            WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
+            THEN SD4.D4_QTDEORI - SD4.D4_QUANT
+            ELSE 0
+        END
+    ) AS QTD_CONSUMIDA
+FROM SD4010 SD4
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD = SD4.D4_PRODUTO
+   AND SB1.D_E_L_E_T_ = ''
+WHERE SD4.D_E_L_E_T_ = ''
+  AND SD4.D4_COD = '10080063'
+  AND SB1.B1_GRUPO = '9030'
+  AND SD4.D4_DATA >= '20260301'
+  AND SD4.D4_DATA <= '20260331'
+GROUP BY
+    SD4.D4_PRODUTO,
+    SB1.B1_DESC
+HAVING SUM(
+        CASE
+            WHEN SD4.D4_QTDEORI > SD4.D4_QUANT
+            THEN SD4.D4_QTDEORI - SD4.D4_QUANT
+            ELSE 0
+        END
+    ) > 0
+ORDER BY QTD_CONSUMIDA DESC, SD4.D4_PRODUTO;
+```
+
+---
+
+#### 📊 Resultado obtido no caso validado
+
+| Código do produto | Descrição do produto | Quantidade consumida |
+|------|----------|----------|
+| 90300007 | CHICOTE DE LIGACAO - ROHS | 702.0 |
+| 90300053 | CHICOTE DE LIGACAO - ROHS | 216.0 |
+| 90300014 | CHICOTE DE LIGACAO - ROHS | 162.0 |
+| 90300078 | RESISTOR ESTRELA 3W 25KVA 100K | 162.0 |
+| 90300061 | RESISTOR RDC 3W 120K - ROHS | 150.0 |
+| 90300064 | CHICOTE DE LIGACAO- 3W - ROHS | 150.0 |
+| 90300073 | RESISTOR ESTRELA 3W 82K | 81.0 |
+| 90300076 | RESISTOR ESTRELA 3W 25KVA 62K | 81.0 |
+| 90300077 | RESISTOR ESTRELA 3W 25KVA 82K | 81.0 |
+
+---
+
+#### 🧭 Conclusão técnica
+
+A documentação e a validação prática demonstram que a forma correta de medir o consumo real do item **10080063** na **SD4010** é:
+
+- **não** usar `D4_QTDEORI` isoladamente;
+- usar o cálculo **`D4_QTDEORI - D4_QUANT`**;
+- filtrar os produtos do grupo desejado na **SB1010**;
+- consolidar o resultado por produto pai (`D4_PRODUTO`).
+
+Essa abordagem torna o cálculo:
+
+- **determinístico**;
+- **auditável**;
+- **reproduzível**;
+- aderente ao comportamento real do empenho e consumo da matéria-prima no Protheus.
+
