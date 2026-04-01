@@ -2754,3 +2754,191 @@ Essa abordagem torna o cálculo:
 - **reproduzível**;
 - aderente ao comportamento real do empenho e consumo da matéria-prima no Protheus.
 
+### 19. Usuário: **“Listar os produtos mais comprados”**
+
+#### 🎯 Objetivo
+
+Listar os **produtos mais comprados em um período**, considerando os **itens das notas fiscais de entrada**, com possibilidade de análise por **filial**, permitindo identificar:
+
+- os produtos com maior **quantidade comprada**;
+- os produtos com maior **valor total comprado**;
+- a **quantidade de notas fiscais** em que cada item apareceu;
+- a **última data de compra** dentro do período analisado.
+
+A consulta tem como finalidade:
+
+- apoiar análises de **compras e suprimentos**;
+- identificar itens de **maior giro de entrada**;
+- apoiar negociações com fornecedores;
+- dar visibilidade dos itens com maior peso no processo de compra.
+
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SD1010 — Itens de Nota Fiscal de Entrada
+
+| Coluna      | Descrição |
+|------------|-----------|
+| D1_FILIAL  | Filial |
+| D1_COD     | Código do produto |
+| D1_DOC     | Número da nota fiscal |
+| D1_QUANT   | Quantidade comprada |
+| D1_TOTAL   | Valor total do item |
+| D1_EMISSAO | Data de emissão da nota |
+| D1_FORNECE | Código do fornecedor |
+| D1_LOJA    | Loja do fornecedor |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| B1_TIPO    | Tipo do produto |
+| B1_GRUPO   | Grupo do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SA2010 — Cadastro de Fornecedores *(opcional para filtros de fornecedor)*
+
+| Coluna      | Descrição |
+|------------|-----------|
+| A2_COD     | Código do fornecedor |
+| A2_LOJA    | Loja do fornecedor |
+| A2_NOME    | Nome do fornecedor |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Período analisado  
+  - `D1_EMISSAO >= :DATA_INICIO`  
+  - `D1_EMISSAO < :DATA_FIM`
+
+- Considerar somente registros ativos  
+  - `SD1010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`
+
+- Quando necessário, permitir corte por filial  
+  - `D1_FILIAL = :FILIAL`
+
+- Quando necessário, permitir exclusão de fornecedores específicos ou transportadoras via `SA2010`
+
+---
+
+#### 💾 Consulta
+
+```sql
+SELECT TOP 50
+    SD1.D1_FILIAL                                   AS FILIAL,
+    SD1.D1_COD                                      AS COD_PRODUTO,
+    SB1.B1_DESC                                     AS DESCRICAO_PRODUTO,
+    COUNT(DISTINCT SD1.D1_DOC)                      AS QTDE_NFS,
+    SUM(SD1.D1_QUANT)                               AS QTD_TOTAL_COMPRADA,
+    SUM(SD1.D1_TOTAL)                               AS VALOR_TOTAL_COMPRADO,
+    MAX(SD1.D1_EMISSAO)                             AS ULTIMA_COMPRA
+FROM SD1010 SD1
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD = SD1.D1_COD
+WHERE
+    SD1.D_E_L_E_T_ = ''
+    AND SB1.D_E_L_E_T_ = ''
+    AND SD1.D1_EMISSAO >= :DATA_INICIO
+    AND SD1.D1_EMISSAO < :DATA_FIM
+GROUP BY
+    SD1.D1_FILIAL,
+    SD1.D1_COD,
+    SB1.B1_DESC
+ORDER BY
+    SUM(SD1.D1_QUANT) DESC,
+    SUM(SD1.D1_TOTAL) DESC,
+    SD1.D1_COD ASC;
+```
+
+---
+
+#### 🧠 Regras de interpretação
+
+- **Tabela principal de compras:** `SD1010`
+- **Descrição do produto:** `SB1010`
+- **Quantidade comprada:** `SUM(D1_QUANT)`
+- **Valor total comprado:** `SUM(D1_TOTAL)`
+- **Quantidade de notas:** `COUNT(DISTINCT D1_DOC)`
+- **Última compra no período:** `MAX(D1_EMISSAO)`
+
+---
+
+#### 🔁 Variação com filtro de fornecedor
+
+Use esta versão quando a análise precisar:
+
+- excluir fornecedores internos;
+- desconsiderar transportadoras;
+- filtrar compras válidas por fornecedor.
+
+```sql
+SELECT TOP 50
+    SD1.D1_FILIAL                                   AS FILIAL,
+    SD1.D1_COD                                      AS COD_PRODUTO,
+    SB1.B1_DESC                                     AS DESCRICAO_PRODUTO,
+    COUNT(DISTINCT SD1.D1_DOC)                      AS QTDE_NFS,
+    SUM(SD1.D1_QUANT)                               AS QTD_TOTAL_COMPRADA,
+    SUM(SD1.D1_TOTAL)                               AS VALOR_TOTAL_COMPRADO,
+    MAX(SD1.D1_EMISSAO)                             AS ULTIMA_COMPRA
+FROM SD1010 SD1
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD = SD1.D1_COD
+INNER JOIN SA2010 SA2
+    ON SA2.A2_COD  = SD1.D1_FORNECE
+   AND SA2.A2_LOJA = SD1.D1_LOJA
+WHERE
+    SD1.D_E_L_E_T_ = ''
+    AND SB1.D_E_L_E_T_ = ''
+    AND SA2.D_E_L_E_T_ = ''
+    AND SD1.D1_EMISSAO >= :DATA_INICIO
+    AND SD1.D1_EMISSAO < :DATA_FIM
+    AND UPPER(SA2.A2_NOME) NOT LIKE '%TRANSP%'
+GROUP BY
+    SD1.D1_FILIAL,
+    SD1.D1_COD,
+    SB1.B1_DESC
+ORDER BY
+    SUM(SD1.D1_QUANT) DESC,
+    SUM(SD1.D1_TOTAL) DESC,
+    SD1.D1_COD ASC;
+```
+
+---
+
+#### ✅ Resultado esperado
+
+A consulta deve retornar, para cada produto comprado no período:
+
+- filial;
+- código do produto;
+- descrição;
+- quantidade de notas fiscais;
+- quantidade total comprada;
+- valor total comprado;
+- data da última compra.
+
+---
+
+#### 📌 Observações
+
+- Quando o usuário pedir **“os mais comprados”**, o critério principal deve ser **quantidade comprada** (`SUM(D1_QUANT)`).
+- Quando o usuário pedir **“os que mais geraram valor de compra”**, o critério principal pode ser **valor total** (`SUM(D1_TOTAL)`).
+- Quando o usuário pedir **por filial**, manter `D1_FILIAL` no `SELECT` e no `GROUP BY`.
+- Quando o usuário pedir **geral**, remover `D1_FILIAL` do agrupamento.
+- Quando o usuário pedir **Top N**, aplicar `TOP N` no `SELECT`.
+
+---
+
+Fonte de referência: exemplos e padrão da rota `/data/sql` no guia enviado pelo usuário. fileciteturn0file0
+
