@@ -2940,5 +2940,158 @@ A consulta deve retornar, para cada produto comprado no período:
 
 ---
 
-Fonte de referência: exemplos e padrão da rota `/data/sql` no guia enviado pelo usuário. fileciteturn0file0
+### 20. Usuário: **“Listar os refugos de matéria-prima no período”**
+
+#### 🎯 Objetivo
+
+Listar os **registros de refugo/perda de matéria-prima** no Protheus dentro de um **período definido**, com rastreabilidade por:
+
+- filial;
+- data da perda;
+- ordem de produção (OP);
+- operação;
+- matéria-prima perdida;
+- quantidade perdida;
+- motivo da perda;
+- recurso / centro de trabalho;
+- vínculo com movimentação de estoque.
+
+A consulta tem como finalidade:
+
+- identificar as **matérias-primas que geraram refugo**;
+- apoiar análises de **perda produtiva e desperdício**;
+- rastrear perdas por **OP, operação e recurso**;
+- fornecer base auditável para indicadores de **refugo e sucata**.
+
+---
+
+#### 🧱 Tabelas envolvidas
+
+##### SBC010 — Perda por OP
+
+| Coluna      | Descrição |
+|------------|-----------|
+| BC_FILIAL  | Filial |
+| BC_DATA    | Data da perda |
+| BC_OP      | Ordem de produção |
+| BC_OPERAC  | Operação |
+| BC_PRODUTO | Produto perdido |
+| BC_TIPO    | Tipo da perda (`R` = Refugo, `S` = Scrap) |
+| BC_QUANT   | Quantidade da perda |
+| BC_MOTIVO  | Motivo da perda |
+| BC_RECURSO | Recurso / CT |
+| BC_SEQSD3  | Sequência da movimentação SD3 |
+| BC_IDENSH6 | Identificação vinculada ao SH6 |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+##### SB1010 — Cadastro de Produtos
+
+| Coluna      | Descrição |
+|------------|-----------|
+| B1_COD     | Código do produto |
+| B1_DESC    | Descrição do produto |
+| B1_TIPO    | Tipo do produto |
+| D_E_L_E_T_ | Indicador de exclusão lógica |
+
+---
+
+#### ⚙️ Condições aplicadas
+
+- Período analisado  
+  - `BC_DATA >= :DATA_INICIO`  
+  - `BC_DATA < :DATA_FIM`
+
+- Considerar somente registros ativos  
+  - `SBC010.D_E_L_E_T_ = ''`  
+  - `SB1010.D_E_L_E_T_ = ''`
+
+- Considerar somente **matéria-prima**  
+  - `SB1010.B1_TIPO = 'MP'`
+
+- Considerar somente perdas classificadas como **refugo ou scrap**  
+  - `BC_TIPO IN ('R','S')`
+
+---
+
+#### 💾 Consulta
+
+```sql
+SELECT TOP 50
+    BC.BC_FILIAL                               AS FILIAL,
+    BC.BC_DATA                                 AS DATA_PERDA,
+    BC.BC_OP                                   AS OP,
+    BC.BC_OPERAC                               AS OPERACAO,
+    BC.BC_PRODUTO                              AS COD_MATERIA_PRIMA,
+    SB1.B1_DESC                                AS DESCRICAO_MATERIA_PRIMA,
+    BC.BC_TIPO                                 AS TIPO_PERDA,
+    BC.BC_QUANT                                AS QTD_PERDA,
+    BC.BC_MOTIVO                               AS MOTIVO_PERDA,
+    BC.BC_RECURSO                              AS RECURSO,
+    BC.BC_SEQSD3                               AS SEQ_SD3,
+    BC.BC_IDENSH6                              AS ID_SH6
+FROM SBC010 BC
+INNER JOIN SB1010 SB1
+    ON SB1.B1_COD = BC.BC_PRODUTO
+WHERE
+    BC.D_E_L_E_T_ = ''
+    AND SB1.D_E_L_E_T_ = ''
+    AND BC.BC_DATA >= :DATA_INICIO
+    AND BC.BC_DATA < :DATA_FIM
+    AND SB1.B1_TIPO = 'MP'
+    AND BC.BC_TIPO IN ('R','S')
+ORDER BY
+    BC.BC_QUANT DESC,
+    BC.BC_DATA DESC,
+    BC.BC_PRODUTO ASC;
+```
+
+---
+
+#### 🧠 Regras de interpretação
+
+- **Tabela principal de refugo/perda:** `SBC010`
+- **Produto perdido:** `BC_PRODUTO`
+- **Descrição da matéria-prima:** `SB1010.B1_DESC`
+- **Quantidade perdida:** `BC_QUANT`
+- **Tipo da perda:**
+  - `R = Refugo`
+  - `S = Scrap`
+- **Data da perda:** `BC_DATA`
+- **Motivo da perda:** `BC_MOTIVO`
+- **Recurso / CT:** `BC_RECURSO`
+- **Rastreabilidade da movimentação:** `BC_SEQSD3`
+
+---
+
+#### ✅ Resultado esperado
+
+A consulta deve retornar, para cada registro de perda no período:
+
+- filial;
+- data da perda;
+- OP;
+- operação;
+- código da matéria-prima;
+- descrição da matéria-prima;
+- tipo da perda;
+- quantidade perdida;
+- motivo da perda;
+- recurso;
+- sequência da movimentação;
+- vínculo com SH6, quando existir.
+
+---
+
+#### 📌 Observações
+
+- Quando o usuário pedir **“refugos”**, priorizar `BC_TIPO = 'R'`.
+- Quando o usuário pedir **“scrap”**, priorizar `BC_TIPO = 'S'`.
+- Quando o usuário pedir **“perdas”**, manter `BC_TIPO IN ('R','S')`.
+- Quando o usuário pedir **Top N**, aplicar `TOP N` no `SELECT`.
+- Quando o usuário pedir **agrupado por matéria-prima**, consolidar com `SUM(BC_QUANT)` e `GROUP BY BC_PRODUTO, B1_DESC`.
+
+---
+
 
