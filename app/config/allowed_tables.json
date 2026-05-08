@@ -36,6 +36,8 @@
     "AD1010",
     "ADJ010",
     "AIJ010",
+    "AC1010",
+    "AC2010",
 
     "QI2010",
 
@@ -81,6 +83,8 @@
     "AD1010": "Cabeçalho da OV/LMP — usada para consultar número da OV, filial, revisão, descrição e dados principais da LMP.",
     "ADJ010": "Itens/produtos vinculados à OV/LMP — usada para consultar produtos, revisões e itens relacionados à LMP.",
     "AIJ010": "Histórico/eventos da OV/LMP — usada para consultar processos, etapas, datas, passagens e status da engenharia.",
+    "AC1010": "Processos de Venda / Funil de Vendas — usada para identificar a descrição do processo vinculado à OV/LMP.",
+    "AC2010": "Estágios do Processo de Vendas — usada para identificar a descrição do estágio da OV/LMP, como AC2_STAGE e AC2_DESCRI.",
 
     "QI2010": "Não Conformidades — necessária para cálculo do PPM interno/externo e análise de FNCs.",
 
