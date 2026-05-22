@@ -21,6 +21,7 @@
     "SD4010",
     "SD3010",
     "SB2010",
+    "SB9010",
     "SBC010",
 
     "SD1010",
@@ -67,7 +68,8 @@
 
     "SD4010": "Empenhos / Requisições da OP — usada para componentes empenhados, consumo previsto e saldo de empenho.",
     "SD3010": "Movimentações Internas — usada para consumo, movimentação de estoque, apontamentos e validações de produção.",
-    "SB2010": "Saldos em Estoque — usada para consulta de estoque por filial, local e produto.",
+    "SB2010": "Saldos em Estoque — usada para consulta de estoque atual por filial, local e produto.",
+    "SB9010": "Saldos Iniciais / Fechamento de Estoque — usada para consultar saldo e valor de estoque em datas de fechamento, como inventário mensal e MATR460.",
     "SBC010": "Perda por OP — usada para refugo, scrap, perdas por OP e análises internas de qualidade.",
 
     "SD1010": "⚠️ Itens de Notas Fiscais de Entrada — contém dados fiscais; usada para compras, entradas e histórico de aquisição.",
@@ -94,6 +96,6 @@
     "SX9010": "Dicionário de Relacionamentos Protheus — usada para consultar relações entre tabelas.",
 
     "SD2010": "⚠️ Itens de Notas Fiscais de Saída — contém dados fiscais. Não está liberada em allowed_tables neste objeto.",
-    "_policy": "Essas tabelas são liberadas apenas sob auditoria e controle interno de segurança. Consultas devem respeitar D_E_L_E_T_ = ' ' e evitar dados sensíveis quando não necessários."
+    "_policy": "Essas tabelas são liberadas apenas sob auditoria e controle interno de segurança. Consultas devem respeitar D_E_L_E_T_ = '' e evitar dados sensíveis quando não necessários."
   }
 }
