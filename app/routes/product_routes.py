@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.product_service import get_product, get_structure, get_parents, get_guide, get_inspection, get_product_analyser, get_customers, get_structure_excel
+from app.services.product_service import get_product, get_structure, get_parents, get_exclusive_materials, get_guide, get_inspection, get_product_analyser, get_customers, get_structure_excel
 from app.services.product_service import get_suppliers, get_inbound_invoice_items, get_outbound_invoice_items, get_stock, search_products_by_description
 from app.services.product_service import get_purchases, get_sales_summary, get_sales_open_orders, get_sales_billing, get_product_pricing, get_internal_movements
 from app.core.responses import success_response, error_response
@@ -143,6 +143,33 @@ def parents(
         )
     except Exception as e:
         log_error(f"Erro ao consultar pais do item {code}: {e}")
+        return error_response(f"Erro inesperado: {e}")
+
+
+@router.get("/{code}/exclusive-materials", summary="Análise de exclusividade de materiais")
+def exclusive_materials(
+    code: str,
+    max_depth: int = Query(15, ge=1, le=20)
+):
+    """
+    Comportamento dinâmico baseado no tipo do produto:
+    - PA/PI: retorna a estrutura hierárquica com flag 'exclusive' em cada componente.
+    - MP: indica se a matéria-prima é exclusiva e para qual produto.
+    """
+    try:
+        result = get_exclusive_materials(code, max_depth)
+        if not result.get("success"):
+            return error_response(result.get("message", "Produto não encontrado."))
+
+        if result.get("mode") == "mp":
+            exclusive_label = "exclusiva" if result["exclusive"] else "não exclusiva"
+            msg = f"Matéria-prima {code} é {exclusive_label} (usada em {result['total_parents']} produto(s))."
+        else:
+            msg = f"Estrutura de {code} retornada com sucesso ({result['total_exclusive']}/{result['total']} exclusivos)."
+
+        return success_response(data=result, message=msg)
+    except Exception as e:
+        log_error(f"Erro ao consultar exclusividade de {code}: {e}")
         return error_response(f"Erro inesperado: {e}")
 
 

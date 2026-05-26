@@ -63,6 +63,15 @@ def get_parents(code: str, max_depth: int = 10, page: int = 1, page_size: int = 
         log_error(f"Erro ao listar produtos pai do item {code}: {e}")
         raise DatabaseConnectionError(str(e))
 
+def get_exclusive_materials(code: str, max_depth: int = 15) -> dict:
+    repo = ProductRepository()
+    log_info(f"Buscando estrutura com flag de exclusividade para {code}")
+    try:
+        return repo.list_exclusive_materials(code, max_depth)
+    except Exception as e:
+        log_error(f"Erro ao listar matérias-primas exclusivas do item {code}: {e}")
+        raise DatabaseConnectionError(str(e))
+
 def get_suppliers(code: str, page: int = 1, page_size: int = 50) -> dict:
     repo = ProductRepository()
     log_info(f"Buscando fornecedores para {code} (página {page})")

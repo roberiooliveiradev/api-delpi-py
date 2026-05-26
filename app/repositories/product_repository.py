@@ -827,6 +827,233 @@ class ProductRepository(BaseRepository):
 
 
     # -------------------------------
+    # 🔹 EXCLUSIVE MATERIALS
+    # -------------------------------
+    def get_product_type(self, code: str) -> dict:
+        query = """
+            SELECT 
+                RTRIM(B1_COD) AS code,
+                RTRIM(B1_DESC) AS description,
+                RTRIM(B1_TIPO) AS type,
+                RTRIM(B1_UM) AS unit
+            FROM SB1010 WITH (NOLOCK)
+            WHERE B1_COD = ?
+            AND D_E_L_E_T_ = '';
+        """
+        rows = self.execute_query(query, (code,))
+        if rows:
+            return rows[0]
+        return None
+
+    def list_exclusive_materials(
+        self,
+        code: str,
+        max_depth: int = 15
+    ) -> dict:
+
+        product = self.get_product_type(code)
+        if not product:
+            return {
+                "success": False,
+                "message": f"Produto {code} não encontrado.",
+                "data": None
+            }
+
+        product_type = (product["type"] or "").strip()
+
+        if product_type == "MP":
+            return self._exclusive_check_mp(code, product)
+        else:
+            return self._exclusive_structure(code, product, max_depth)
+
+    def _exclusive_check_mp(self, code: str, product: dict) -> dict:
+        usage_query = """
+            SELECT 
+                RTRIM(sg.G1_COD) AS parent_code,
+                RTRIM(sb.B1_DESC) AS parent_description,
+                RTRIM(sb.B1_TIPO) AS parent_type,
+                RTRIM(sb.B1_UM) AS parent_unit,
+                sg.G1_QUANT AS quantity
+            FROM SG1010 sg WITH (NOLOCK)
+            INNER JOIN SB1010 sb WITH (NOLOCK)
+                ON sb.B1_COD = sg.G1_COD
+                AND sb.D_E_L_E_T_ = ''
+            WHERE sg.G1_COMP = ?
+            AND sg.D_E_L_E_T_ = ''
+            AND sg.G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
+            ORDER BY sg.G1_COD;
+        """
+        rows = self.execute_query(usage_query, (code,))
+
+        parents = []
+        for r in rows:
+            parents.append({
+                "code": r["parent_code"],
+                "description": r["parent_description"],
+                "type": r["parent_type"],
+                "unit": r["parent_unit"],
+                "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
+            })
+
+        is_exclusive = len(parents) == 1
+
+        return {
+            "success": True,
+            "mode": "mp",
+            "exclusive": is_exclusive,
+            "total_parents": len(parents),
+            "data": {
+                "code": product["code"],
+                "description": product["description"],
+                "type": product["type"],
+                "unit": product["unit"],
+                "exclusive": is_exclusive,
+                "exclusive_to": parents[0] if is_exclusive else None,
+                "parents": parents
+            }
+        }
+
+    def _exclusive_structure(self, code: str, product: dict, max_depth: int) -> dict:
+        structure_query = """
+            WITH recursive_bom AS (
+                SELECT 
+                    G1_COD   AS parent_code,
+                    G1_COMP  AS component_code,
+                    G1_QUANT AS quantity,
+                    1        AS bom_level
+                FROM SG1010 WITH (NOLOCK)
+                WHERE D_E_L_E_T_ = ''
+                AND G1_COD = ?
+                AND G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
+
+                UNION ALL
+
+                SELECT 
+                    c.G1_COD,
+                    c.G1_COMP,
+                    c.G1_QUANT,
+                    p.bom_level + 1
+                FROM SG1010 c WITH (NOLOCK)
+                INNER JOIN recursive_bom p
+                    ON p.component_code = c.G1_COD
+                WHERE c.D_E_L_E_T_ = ''
+                AND p.bom_level < ?
+                AND c.G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
+            )
+            SELECT 
+                rb.parent_code,
+                RTRIM(parent.B1_DESC) AS parent_description,
+                RTRIM(parent.B1_TIPO) AS parent_type,
+                RTRIM(parent.B1_UM)   AS parent_unit,
+
+                rb.component_code,
+                RTRIM(comp.B1_DESC)  AS component_description,
+                RTRIM(comp.B1_TIPO) AS component_type,
+                RTRIM(comp.B1_UM)   AS component_unit,
+
+                rb.quantity,
+                rb.bom_level
+            FROM recursive_bom rb
+            LEFT JOIN SB1010 parent WITH (NOLOCK)
+                ON parent.B1_COD = rb.parent_code
+                AND parent.D_E_L_E_T_ = ''
+            LEFT JOIN SB1010 comp WITH (NOLOCK)
+                ON comp.B1_COD = rb.component_code
+                AND comp.D_E_L_E_T_ = ''
+            ORDER BY rb.bom_level, rb.parent_code, rb.component_code;
+        """
+
+        rows = self.execute_query(structure_query, (code, max_depth))
+
+        if not rows:
+            return {
+                "success": True,
+                "mode": "structure",
+                "total": 0,
+                "total_exclusive": 0,
+                "data": {
+                    "code": product["code"],
+                    "description": product["description"],
+                    "type": product["type"],
+                    "unit": product["unit"],
+                    "exclusive": False,
+                    "components": []
+                }
+            }
+
+        all_components = set()
+        for r in rows:
+            all_components.add(r["component_code"])
+
+        placeholders = ",".join(["?" for _ in all_components])
+        usage_query = f"""
+            SELECT 
+                G1_COMP AS component_code,
+                COUNT(DISTINCT G1_COD) AS total_parents
+            FROM SG1010 WITH (NOLOCK)
+            WHERE D_E_L_E_T_ = ''
+            AND G1_FIM > CONVERT(CHAR(8), GETDATE(), 112)
+            AND G1_COMP IN ({placeholders})
+            GROUP BY G1_COMP;
+        """
+        usage_rows = self.execute_query(usage_query, tuple(all_components))
+        usage_map = {r["component_code"]: r["total_parents"] for r in usage_rows}
+
+        items: dict[str, dict] = {}
+
+        for r in rows:
+            comp_code = r["component_code"]
+            parent_count = usage_map.get(comp_code, 0)
+
+            component_node = {
+                "code": comp_code.strip() if comp_code else comp_code,
+                "description": r["component_description"],
+                "type": r["component_type"],
+                "unit": r["component_unit"],
+                "quantity": float(r["quantity"]) if r["quantity"] is not None else 0.0,
+                "exclusive": parent_count == 1,
+                "components": []
+            }
+
+            parent_code = r["parent_code"]
+
+            if parent_code not in items:
+                items[parent_code] = {
+                    "code": parent_code.strip() if parent_code else parent_code,
+                    "description": r["parent_description"],
+                    "type": r["parent_type"],
+                    "unit": r["parent_unit"],
+                    "quantity": 1.0,
+                    "exclusive": False,
+                    "components": []
+                }
+
+            items[parent_code]["components"].append(component_node)
+            items[comp_code] = component_node
+
+        root = items.get(code, {
+            "code": product["code"],
+            "description": product["description"],
+            "type": product["type"],
+            "unit": product["unit"],
+            "exclusive": False,
+            "components": []
+        })
+        root["exclusive"] = False
+
+        total_items = len(all_components)
+        total_exclusive = sum(1 for c in all_components if usage_map.get(c, 0) == 1)
+
+        return {
+            "success": True,
+            "mode": "structure",
+            "total": total_items,
+            "total_exclusive": total_exclusive,
+            "data": root
+        }
+
+
+    # -------------------------------
     # 🔹 SUPPLIERS
     # -------------------------------
     def list_suppliers(
