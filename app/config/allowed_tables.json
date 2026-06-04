@@ -58,7 +58,7 @@
     "SG1010": "Estrutura de Produtos / BOM — usada para consultar componentes, produto pai e composição do produto.",
     "SG2010": "Roteiro de Operações — usada para operações, recursos, centros de trabalho e identificação da operação final.",
     "SH1010": "Cadastro de Recursos — usada para consultar dados de recursos produtivos/máquinas e vínculo com centro de trabalho.",
-    "SHB010": "Centro de Trabalho — necessária para identificar oficialmente os CTs por filial, como CT de inspeção, nome do centro, centro de custo e local/armazém vinculado.",
+    "SHB010": "Centro de Trabalho — necessária para identificar oficialmente os CTs por filial, como CT de inspeção, nome do centro, centro de custo e local/armazém vinculado. ",
     "NNR010": "Locais de Estoque / Armazéns — necessária para identificar locais como expedição, inspeção, qualidade, acabado e vínculo com centro de trabalho quando existir.",
 
     "QP6010": "Inspeções / Plano de Controle — usada em validações de inspeção e qualidade do produto.",
