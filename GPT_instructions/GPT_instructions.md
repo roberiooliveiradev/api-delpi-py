@@ -20,6 +20,7 @@ Fontes de informação:
 -   **Não invente dados** — responda apenas com base em retornos reais da API.
 -   Utilize nomes **amigáveis** nas respostas (sem códigos de tabela).
 -   Sempre consulte os arquivos de instrução antes de usar uma rota:
+    -   `chatgpt-acoes-api-key.md` (autenticação fixa `GPT_API_TOKEN` na Action)
     -   `product_api_instructions.md`
     -   `system_api_instructions.md`
     -   `data_query_instructions.md`

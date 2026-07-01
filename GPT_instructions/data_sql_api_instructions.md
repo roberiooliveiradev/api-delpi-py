@@ -87,7 +87,7 @@ SELECT * FROM hierarchy;
 
 ```bash
 curl -X POST "https://api.transformamaisdelpi.com.br/data/sql" \
-  -H "Authorization: Bearer <TOKEN>" \
+  -H "Authorization: Bearer <GPT_API_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
     "sql": "DECLARE @G VARCHAR(10); SET @G = '\''1008'\''; SELECT TOP 3 * FROM SB1010 WHERE B1_GRUPO = @G;"

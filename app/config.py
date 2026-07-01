@@ -14,6 +14,8 @@ class Settings:
     # API Server
     PORT: str = os.getenv("PORT", "8000")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "secret")
+    # Token fixo para Custom GPT / Actions (Bearer ou X-Api-Key)
+    GPT_API_TOKEN: str | None = os.getenv("GPT_API_TOKEN") or None
 
     # Configurações de execução do agente GPT
     AUTO_EXECUTE_API: bool = os.getenv("AUTO_EXECUTE_API", "true").lower() == "true"
